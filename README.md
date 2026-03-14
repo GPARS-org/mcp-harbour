@@ -18,7 +18,7 @@ Built as an implementation of the [GPARS](https://github.com/GPARS-org/GPARS) pl
 **Linux / macOS:**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/GPARS-org/mcp-harbour/main/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/GPARS-org/mcp-harbour/main/scripts/install.sh | bash
 ```
 
 **Windows (PowerShell):**
