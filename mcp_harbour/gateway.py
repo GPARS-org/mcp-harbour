@@ -108,7 +108,7 @@ class HarbourGateway:
             return all_tools
 
         @session_server.call_tool()
-        async def call_tool(name: str, arguments: dict) -> List[TextContent]:
+        async def call_tool(name: str, arguments: dict) -> types.CallToolResult:
             server_name = tool_server_map.get(name)
 
             if not server_name:
@@ -123,7 +123,7 @@ class HarbourGateway:
             logger.info(f"Routing tool '{name}' to server '{server_name}'")
             try:
                 result = await process.call_tool(name, arguments)
-                return result.content
+                return result
             except Exception as e:
                 if hasattr(e, 'error'):
                     raise
@@ -184,7 +184,7 @@ class HarbourGateway:
             )
 
             # 5. Run Session
-            async with _mcp_streams(stream) as (
+            async with _mcp_streams(stream, remainder) as (
                 read_stream,
                 write_stream,
             ):
@@ -234,8 +234,12 @@ class HarbourGateway:
 
 
 @asynccontextmanager
-async def _mcp_streams(stream):
-    """Wraps a raw AnyIO ByteStream into MCP SessionMessage streams."""
+async def _mcp_streams(stream, remainder: bytes = b""):
+    """Wraps a raw AnyIO ByteStream into MCP SessionMessage streams.
+
+    If remainder is provided, it is processed first before reading from the stream.
+    This handles the case where the handshake and first MCP message arrive in the same TCP chunk.
+    """
     from anyio.streams.text import TextReceiveStream
 
     read_stream_writer, read_stream = anyio.create_memory_object_stream(0)
@@ -243,18 +247,25 @@ async def _mcp_streams(stream):
 
     text_stream = TextReceiveStream(stream)
 
+    async def _process_data(data: str):
+        for part in data.splitlines():
+            if not part.strip():
+                continue
+            try:
+                message = types.JSONRPCMessage.model_validate_json(part)
+                await read_stream_writer.send(SessionMessage(message))
+            except Exception as exc:
+                await read_stream_writer.send(exc)
+
     async def stream_reader():
         try:
             async with read_stream_writer:
+                # Process any remainder from the handshake first
+                if remainder:
+                    await _process_data(remainder.decode())
+
                 async for line in text_stream:
-                    for part in line.splitlines():
-                        if not part.strip():
-                            continue
-                        try:
-                            message = types.JSONRPCMessage.model_validate_json(part)
-                            await read_stream_writer.send(SessionMessage(message))
-                        except Exception as exc:
-                            await read_stream_writer.send(exc)
+                    await _process_data(line)
         except anyio.ClosedResourceError:
             pass
         except Exception as e:

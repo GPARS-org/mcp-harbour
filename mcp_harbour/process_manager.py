@@ -25,7 +25,7 @@ class ServerProcess:
             raise ValueError(f"Invalid empty command for {self.server_config.name}")
 
         executable = parts[0]
-        final_args = parts[1:] + self.server_config.args
+        final_args = parts[1:]
 
         server_params = StdioServerParameters(
             command=executable,

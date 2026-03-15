@@ -10,10 +10,7 @@ class ServerType(str, Enum):
 
 class Server(BaseModel):
     name: str = Field(..., description="Unique name of the docked ship")
-    command: str = Field(..., description="Command to execute")
-    args: List[str] = Field(
-        default_factory=list, description="Arguments for the command"
-    )
+    command: str = Field(..., description="Full command to execute (e.g. 'npx -y @mcp/server /path')")
     env: Dict[str, str] = Field(
         default_factory=dict, description="Environment variables"
     )

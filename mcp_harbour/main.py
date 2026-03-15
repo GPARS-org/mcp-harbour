@@ -28,12 +28,14 @@ app.add_typer(permit_app, name="permit", help="Manage permissions (Policies)")
 @app.command()
 def dock(
     name: str = typer.Option(..., help="Name of the server/ship"),
-    command: str = typer.Option(..., help="Command to run the server"),
-    args: Optional[List[str]] = typer.Option(None, help="Arguments for the command"),
+    command: str = typer.Option(..., help="Full command to run the server (e.g. 'npx -y @modelcontextprotocol/server-filesystem /path')"),
     server_type: ServerType = typer.Option(ServerType.stdio, help="Type of connection"),
 ):
     """
     Dock (install/register) a new MCP server.
+
+    The --command should be the full command including arguments, e.g.:
+    harbour dock --name filesystem --command "npx -y @modelcontextprotocol/server-filesystem /home/user"
     """
     if config_manager.get_server(name):
         console.print(f"[bold red]Error:[/bold red] Server '{name}' already docked.")
@@ -42,7 +44,6 @@ def dock(
     server = Server(
         name=name,
         command=command,
-        args=args or [],
         server_type=server_type,
     )
     config_manager.add_server(server)
@@ -81,7 +82,7 @@ def list_servers():
     for server in servers:
         table.add_row(
             server.name,
-            f"{server.command} {' '.join(server.args)}",
+            server.command,
             server.server_type.value,
         )
 

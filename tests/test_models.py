@@ -18,15 +18,13 @@ class TestServer:
         s = Server(name="test", command="echo hello")
         assert s.name == "test"
         assert s.command == "echo hello"
-        assert s.args == []
         assert s.env == {}
         assert s.server_type == ServerType.stdio
 
     def test_create_full(self):
         s = Server(
             name="fs",
-            command="npx",
-            args=["-y", "@modelcontextprotocol/server-filesystem"],
+            command="npx -y @modelcontextprotocol/server-filesystem",
             env={"HOME": "/tmp"},
             server_type=ServerType.http,
         )
