@@ -22,14 +22,11 @@ class Server(BaseModel):
 class ArgumentPolicy(BaseModel):
     """
     Defines a policy for a specific argument of a tool.
-    Example:
-        arg_name: "path"
-        match_type: "glob"
-        pattern: "/home/user/public/**"
+    match_type is either "glob" (default) or "regex" (prefix re: in CLI).
     """
 
     arg_name: str
-    match_type: str = Field(..., pattern="^(glob|regex|exact)$")
+    match_type: str = Field(default="glob", pattern="^(glob|regex)$")
     pattern: str
 
 

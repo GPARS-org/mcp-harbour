@@ -66,7 +66,7 @@ def engine_multi_policy():
                         ),
                         ArgumentPolicy(
                             arg_name="db",
-                            match_type="exact",
+                            match_type="glob",
                             pattern="readonly_db",
                         ),
                     ],
@@ -187,7 +187,7 @@ class TestArgumentPolicy:
             )
         assert_authorization_denied(exc_info)
 
-    def test_exact_policy_denied(self, engine_multi_policy):
+    def test_glob_literal_policy_denied(self, engine_multi_policy):
         with pytest.raises(McpError) as exc_info:
             engine_multi_policy.check_permission(
                 "database",
