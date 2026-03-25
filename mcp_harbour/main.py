@@ -101,7 +101,6 @@ def inspect(name: str):
 
     console.print(f"[bold]Name:[/bold] {server.name}")
     console.print(f"[bold]Command:[/bold] {server.command}")
-    console.print(f"[bold]Args:[/bold] {server.args}")
     console.print(f"[bold]Env:[/bold] {server.env}")
     console.print(f"[bold]Type:[/bold] {server.server_type}")
 
