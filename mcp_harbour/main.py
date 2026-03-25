@@ -276,10 +276,17 @@ def permit_allow(
     server: str,
     tool: str = typer.Option("*", help="Tool name or glob pattern (default: *)"),
     args: Optional[List[str]] = typer.Option(
-        None, help="Argument policy in format 'arg_name=pattern' (e.g. path=/tmp/*)"
+        None, help="Argument policies: 'arg=pattern' (glob) or 'arg=re:pattern' (regex)"
     ),
 ):
-    """Grant permission to an identity using a whitelist approach."""
+    """
+    Grant permission to an identity.
+
+    Examples:
+      harbour permit allow agent filesystem
+      harbour permit allow agent filesystem --tool "read_*" --args "path=/home/user/**"
+      harbour permit allow agent db --tool "query" --args "sql=re:^SELECT.*" "db=production"
+    """
     if not config_manager.get_identity(identity):
         console.print(f"[bold red]Identity '{identity}' not found![/bold red]")
         raise typer.Exit(1)
@@ -294,19 +301,18 @@ def permit_allow(
         for arg_str in args:
             try:
                 key, pattern = arg_str.split("=", 1)
-                if "*" in pattern or "?" in pattern:
-                    match_type = "glob"
-                elif pattern.startswith("^") or pattern.endswith("$"):
+                if pattern.startswith("re:"):
                     match_type = "regex"
+                    pattern = pattern[3:]
                 else:
-                    match_type = "exact"
+                    match_type = "glob"
 
                 policies.append(
                     ArgumentPolicy(arg_name=key, match_type=match_type, pattern=pattern)
                 )
             except ValueError:
                 console.print(
-                    f"[bold red]Invalid argument policy format: {arg_str}. Use key=value[/bold red]"
+                    f"[bold red]Invalid argument policy format: {arg_str}. Use key=pattern or key=re:pattern[/bold red]"
                 )
                 raise typer.Exit(1)
 
@@ -345,7 +351,7 @@ def permit_show(identity: str):
             if tool.policies:
                 pol_str = " -> " + ", ".join(
                     [
-                        f"{p.arg_name}={p.pattern} ({p.match_type})"
+                        f"{p.arg_name}={'re:' if p.match_type == 'regex' else ''}{p.pattern}"
                         for p in tool.policies
                     ]
                 )

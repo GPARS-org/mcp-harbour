@@ -60,11 +60,15 @@ class TestArgumentPolicy:
         p = ArgumentPolicy(arg_name="query", match_type="regex", pattern="^SELECT.*")
         assert p.match_type == "regex"
 
-    def test_valid_exact(self):
-        p = ArgumentPolicy(arg_name="mode", match_type="exact", pattern="readonly")
-        assert p.match_type == "exact"
+    def test_default_match_type_is_glob(self):
+        p = ArgumentPolicy(arg_name="path", pattern="/tmp/**")
+        assert p.match_type == "glob"
 
     def test_invalid_match_type_raises(self):
+        with pytest.raises(ValidationError):
+            ArgumentPolicy(arg_name="x", match_type="exact", pattern="*")
+
+    def test_fuzzy_match_type_raises(self):
         with pytest.raises(ValidationError):
             ArgumentPolicy(arg_name="x", match_type="fuzzy", pattern="*")
 

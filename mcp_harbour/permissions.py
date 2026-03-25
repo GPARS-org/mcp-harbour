@@ -57,10 +57,6 @@ class PermissionEngine:
                 )
 
     def _match_policy(self, policy: ArgumentPolicy, value: str) -> bool:
-        if policy.match_type == "exact":
-            return value == policy.pattern
-        elif policy.match_type == "glob":
-            return fnmatch(value, policy.pattern)
-        elif policy.match_type == "regex":
+        if policy.match_type == "regex":
             return bool(re.match(policy.pattern, value))
-        return False
+        return fnmatch(value, policy.pattern)

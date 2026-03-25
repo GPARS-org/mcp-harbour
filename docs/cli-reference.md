@@ -128,18 +128,23 @@ Grant tool-level permissions to an identity for a server.
 # Allow all tools on filesystem
 harbour permit allow my-agent filesystem
 
-# Allow only read_file with path restriction
+# Allow only read_text_file with path restriction
 harbour permit allow my-agent filesystem \
-  --tool "read_file" \
+  --tool "read_text_file" \
   --args "path=/home/user/projects/**"
+
+# Multiple argument policies
+harbour permit allow my-agent db \
+  --tool "query" \
+  --args "sql=re:^SELECT\s.*" "db=production"
 ```
 
 | Option | Default | Description |
 |---|---|---|
 | `--tool` | `*` | Tool name or glob pattern |
-| `--args` | — | Argument policy: `arg_name=pattern` |
+| `--args` | — | Argument policy: `arg_name=pattern` (glob) or `arg=re:pattern` (regex) |
 
-Argument patterns are auto-detected: `*` or `?` = glob, `^` or `$` = regex, otherwise exact.
+A glob pattern without wildcards is an exact match.
 
 #### `harbour permit show`
 

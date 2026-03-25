@@ -25,12 +25,24 @@ Each identity can have a policy file at `~/.mcp-harbour/policies/<identity_name>
   "permissions": {
     "filesystem": [
       {
-        "name": "read_file",
+        "name": "read_text_file",
         "policies": [
           {
             "arg_name": "path",
             "match_type": "glob",
             "pattern": "/home/user/projects/**"
+          }
+        ]
+      }
+    ],
+    "database": [
+      {
+        "name": "query",
+        "policies": [
+          {
+            "arg_name": "sql",
+            "match_type": "regex",
+            "pattern": "^SELECT\\s.*"
           }
         ]
       }
@@ -51,8 +63,17 @@ Each identity can have a policy file at `~/.mcp-harbour/policies/<identity_name>
 | Field | Type | Description |
 |---|---|---|
 | `arg_name` | `str` | Name of the argument to restrict |
-| `match_type` | `str` | One of: `glob`, `regex`, `exact` |
+| `match_type` | `str` | `glob` (default) or `regex` |
 | `pattern` | `str` | Pattern to match against the argument value |
+
+Glob is the default. Use the `re:` prefix for regex:
+
+```bash
+harbour permit allow agent filesystem --tool "read_text_file" --args "path=/home/user/**"
+harbour permit allow agent db --tool "query" --args "sql=re:^SELECT\s.*" "db=production"
+```
+
+A glob pattern without wildcards is an exact match.
 
 ## Permission Engine
 
