@@ -16,7 +16,7 @@ error() { echo -e "${RED}[x]${NC} $1"; exit 1; }
 
 # ── 1. Install package ─────────────────────────────────────────────
 
-REPO="https://github.com/GPARS-org/mcp-harbour.git"
+REPO="https://github.com/mcpharbour/mcpharbour.git"
 
 if command -v uv &>/dev/null; then
     info "Installing ${PACKAGE} via uv..."

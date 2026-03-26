@@ -1,0 +1,80 @@
+---
+title: Installation
+description: Install MCP Harbour and start the daemon.
+---
+
+## One-line Install
+
+The install script installs the package, registers the daemon as a system service, and starts it automatically.
+
+<CodeGroup>
+
+```bash Linux / macOS
+curl -fsSL https://raw.githubusercontent.com/mcpharbour/mcpharbour/main/scripts/install.sh | bash
+```
+
+```powershell Windows
+irm https://raw.githubusercontent.com/mcpharbour/mcpharbour/main/scripts/install.ps1 | iex
+```
+
+</CodeGroup>
+
+This installs two commands:
+
+| Command | Purpose |
+|---------|---------|
+| `harbour` | Server administration — manage servers, identities, policies, daemon |
+| `harbour-bridge` | Agent bridge — lightweight, no admin access |
+
+## What the Install Script Does
+
+1. Installs `mcp-harbour` via `uv tool install` (or `pipx` as fallback)
+2. Registers the daemon as a system service:
+   - **Linux**: systemd user service
+   - **macOS**: launchd user agent
+   - **Windows**: Task Scheduler task
+3. Starts the daemon on `127.0.0.1:4767`
+
+The daemon starts on boot and restarts on crash.
+
+## Verify
+
+```bash
+harbour status
+```
+
+## Uninstall
+
+<CodeGroup>
+
+```bash Linux / macOS
+curl -fsSL https://raw.githubusercontent.com/mcpharbour/mcpharbour/main/scripts/uninstall.sh | bash
+```
+
+```powershell Windows
+irm https://raw.githubusercontent.com/mcpharbour/mcpharbour/main/scripts/uninstall.ps1 | iex
+```
+
+</CodeGroup>
+
+## Development Setup
+
+For contributing or local development:
+
+```bash
+git clone https://github.com/mcpharbour/mcpharbour.git
+cd mcp-harbour
+uv venv
+source .venv/bin/activate
+uv pip install -e ".[dev]"
+```
+
+This installs in editable mode — changes to the source take effect immediately.
+
+```bash
+# Run tests
+pytest
+
+# Run the daemon locally
+harbour serve
+```

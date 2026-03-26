@@ -3,7 +3,7 @@
 ## Development Setup
 
 ```bash
-git clone https://github.com/GPARS-org/mcp-harbour.git
+git clone https://github.com/mcpharbour/mcpharbour.git
 cd mcp-harbour
 uv venv
 source .venv/bin/activate    # or .venv\Scripts\activate on Windows
@@ -32,7 +32,7 @@ mcp_harbour/
 
 ## Architecture
 
-MCP Harbour implements the [GPARS](https://github.com/GPARS-org/GPARS) plane boundary. The key architectural rule: the agent (Cognitive Plane) never talks directly to MCP servers (Action Plane). All traffic flows through the gateway, which enforces the user's security policy.
+MCP Harbour implements the [GPARS](https://gpars.io) plane boundary. The key architectural rule: the agent (Cognitive Plane) never talks directly to MCP servers (Action Plane). All traffic flows through the harbour, which enforces the user's security policy.
 
 Two entry points exist by design:
 - `harbour` — admin CLI for managing servers, identities, and policies
@@ -43,8 +43,8 @@ These are intentionally separate so that agents cannot access admin commands.
 ## What We're Looking For
 
 - Bug fixes and reliability improvements
-- Additional policy match types (beyond glob, regex, exact)
-- Performance improvements to the gateway proxy
+- Additional policy match types (beyond glob and regex)
+- Performance improvements to the proxy layer
 - Test coverage for edge cases
 - Documentation improvements
 

@@ -1,0 +1,180 @@
+---
+title: harbour CLI
+description: Server administration commands.
+---
+
+The `harbour` CLI is the admin interface for managing your MCP servers, identities, and policies. It's separate from `harbour-bridge` — agents never interact with this CLI.
+
+## Server Management
+
+Servers are the MCP servers you want agents to access through the harbour. Docking a server registers it with the daemon — the daemon handles starting and stopping server processes.
+
+### harbour dock
+
+Register a new MCP server with the harbour.
+
+```bash
+harbour dock --name filesystem \
+  --command "npx -y @modelcontextprotocol/server-filesystem /home/user"
+```
+
+| Option | Required | Default | Description |
+|---|---|---|---|
+| `--name` | Yes | — | Unique name for the server |
+| `--command` | Yes | — | Full command to launch the server |
+| `--server-type` | No | `stdio` | `stdio` or `http` |
+
+The command should be the full command line including all arguments. The daemon splits and executes it when spawning the server process.
+
+### harbour undock
+
+Remove a server from the harbour. Any active sessions using this server will lose access on their next connection.
+
+```bash
+harbour undock filesystem
+```
+
+### harbour list
+
+Show all registered servers and their transport type.
+
+```bash
+harbour list
+```
+
+### harbour inspect
+
+Show the full configuration of a specific server.
+
+```bash
+harbour inspect filesystem
+```
+
+## Daemon
+
+The daemon is the long-running process that listens for agent connections, spawns MCP server processes, and enforces policies. It's registered as a system service during installation and runs automatically.
+
+### harbour start
+
+Start the daemon via the platform service manager (systemd, launchd, or Task Scheduler).
+
+```bash
+harbour start
+```
+
+### harbour stop
+
+Stop the daemon. All active agent sessions will be disconnected.
+
+```bash
+harbour stop
+```
+
+### harbour status
+
+Check whether the daemon is currently running.
+
+```bash
+harbour status
+```
+
+### harbour serve
+
+Run the daemon in the foreground instead of as a service. Useful for debugging — logs go to stderr.
+
+```bash
+harbour serve
+harbour serve --host 0.0.0.0 --port 5000
+```
+
+| Option | Default | Description |
+|---|---|---|
+| `--host` | `127.0.0.1` | Host to bind |
+| `--port` | `4767` | Port to bind |
+
+## Identity Management
+
+Identities represent agents. Each identity has a name and an API key. The API key is what the agent uses to authenticate — the harbour derives the identity from the key, so agents cannot impersonate each other.
+
+### harbour identity create
+
+Create a new identity and generate an API key. The key is shown once and cannot be retrieved later.
+
+```bash
+harbour identity create my-agent
+```
+
+### harbour identity list
+
+Show all identities and their key prefixes.
+
+```bash
+harbour identity list
+```
+
+### harbour identity delete
+
+Delete an identity and its associated policy. The API key is revoked immediately.
+
+```bash
+harbour identity delete my-agent
+```
+
+## Policy Management
+
+Policies define what an identity is allowed to do. Each `permit allow` command adds a rule to the identity's policy. Without any rules, the identity has zero access.
+
+### harbour permit allow
+
+Grant an identity permission to use tools on a server. Rules are additive — each call adds to the existing policy.
+
+```bash
+harbour permit allow <identity> <server> [--tool PATTERN] [--args POLICIES...]
+```
+
+**Allow all tools on a server:**
+
+```bash
+harbour permit allow my-agent filesystem
+```
+
+**Allow a specific tool:**
+
+```bash
+harbour permit allow my-agent filesystem --tool "read_text_file"
+```
+
+**Restrict by argument value (glob):**
+
+```bash
+harbour permit allow my-agent filesystem --tool "read_text_file" --args "path=/home/user/projects/**"
+```
+
+**Restrict by argument value (regex):**
+
+```bash
+harbour permit allow my-agent database --tool "query" --args "sql=re:^SELECT\s.*"
+```
+
+**Multiple argument restrictions on one tool:**
+
+```bash
+harbour permit allow my-agent database --tool "query" --args "sql=re:^SELECT\s.*" "db=production"
+```
+
+| Option | Default | Description |
+|---|---|---|
+| `--tool` | `*` | Tool name or glob pattern |
+| `--args` | — | Argument policies: `arg=pattern` (glob) or `arg=re:pattern` (regex) |
+
+A glob pattern without wildcards is an exact match.
+
+### harbour permit show
+
+Display the full policy for an identity. Shows which servers, tools, and argument restrictions are configured.
+
+```bash
+harbour permit show my-agent
+```
+
+If no policy exists, the output confirms that the identity has no access.

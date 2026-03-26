@@ -1,21 +1,21 @@
 # MCP Harbour
 
-A security enforcement point for MCP servers. Sits between AI agents and MCP servers, enforcing per-agent security policies defined by the user.
+The port authority for your MCP servers. Dock your servers once, control which agents can access which tools, and manage everything from a single place.
 
-Built as an implementation of the [GPARS](https://github.com/GPARS-org/GPARS) plane boundary — the user-controlled layer that verifies agent identity and governs what agents are permitted to do.
+Built as an implementation of the [GPARS](https://gpars.io) plane boundary — the user-controlled layer that verifies agent identity and governs what agents are permitted to do.
 
 ## Install
 
 **Linux / macOS:**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/GPARS-org/mcp-harbour/main/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/mcpharbour/mcpharbour/main/scripts/install.sh | bash
 ```
 
 **Windows (PowerShell):**
 
 ```powershell
-irm https://raw.githubusercontent.com/GPARS-org/mcp-harbour/main/scripts/install.ps1 | iex
+irm https://raw.githubusercontent.com/mcpharbour/mcpharbour/main/scripts/install.ps1 | iex
 ```
 
 This installs the package, registers the daemon as a system service, and starts it.
@@ -47,12 +47,12 @@ Then configure your MCP client (Claude Desktop, VS Code, Cursor):
 }
 ```
 
-The agent sees a single MCP server with tools from all docked servers — filtered and enforced by its policy. No policy means no access.
+The agent sees tools only from servers and tools its policy permits. No policy means no access.
 
 ## How It Works
 
 ```
-Agent → harbour-bridge → TCP:4767 → HarbourGateway → MCP Servers
+Agent → harbour-bridge → TCP:4767 → Harbour Daemon → MCP Servers
               │                           │
          (no admin          identity verification
           access)           policy enforcement
@@ -63,10 +63,10 @@ Agent → harbour-bridge → TCP:4767 → HarbourGateway → MCP Servers
 
 | Doc | Description |
 |-----|-------------|
-| [Architecture](docs/architecture.md) | System design, GPARS alignment |
-| [CLI Reference](docs/cli-reference.md) | All commands and options |
-| [Permissions](docs/permissions.md) | Policy engine, GPARS error codes |
-| [Configuration](docs/configuration.md) | Config format, file layout |
+| [Architecture](docs/concepts/architecture.mdx) | System design, GPARS alignment |
+| [CLI Reference](docs/reference/cli.mdx) | All commands and options |
+| [Permissions](docs/concepts/permissions.mdx) | Policy engine, error codes |
+| [Configuration](docs/reference/configuration.mdx) | Config format, file layout |
 | [Contributing](CONTRIBUTING.md) | Development setup, guidelines |
 
 ## Author

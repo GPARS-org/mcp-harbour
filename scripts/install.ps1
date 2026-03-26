@@ -12,7 +12,7 @@ function Fail($msg)  { Write-Host "[x] $msg" -ForegroundColor Red; exit 1 }
 $uv = Get-Command uv -ErrorAction SilentlyContinue
 $pipx = Get-Command pipx -ErrorAction SilentlyContinue
 
-$Repo = "https://github.com/GPARS-org/mcp-harbour.git"
+$Repo = "https://github.com/mcpharbour/mcpharbour.git"
 
 if ($uv) {
     Info "Installing $Package via uv..."

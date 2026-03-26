@@ -1,7 +1,7 @@
 [project]
 name = "mcp-harbour"
 version = "0.1.0"
-description = "GPARS plane boundary enforcement point for MCP servers"
+description = "The port authority for your MCP servers"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [

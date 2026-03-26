@@ -1,0 +1,140 @@
+---
+title: Architecture
+description: How MCP Harbour enforces the GPARS plane boundary.
+---
+
+## Overview
+
+MCP Harbour is the port authority for your MCP servers. It aggregates multiple servers into a single endpoint, manages their lifecycle, and enforces per-agent security policies. It implements the [GPARS](https://gpars.io) plane boundary — agents never talk to MCP servers directly.
+
+## System Diagram
+
+```mermaid
+graph TD
+    subgraph Cognitive Plane
+        A1["VS Code<br/><small>harbour-bridge --token sk_A</small>"]
+        A2["Claude Desktop<br/><small>harbour-bridge --token sk_B</small>"]
+        A3["Cursor<br/><small>harbour-bridge --token sk_C</small>"]
+    end
+
+    subgraph Harbour Daemon
+        direction TB
+        AUTH["Identity Verification<br/><small>token → identity lookup</small>"]
+
+        subgraph Sessions
+            S1["Session A<br/><small>policy: read only</small>"]
+            S2["Session B<br/><small>policy: full access</small>"]
+            S3["Session C<br/><small>policy: git only</small>"]
+        end
+
+        PA["Port Authority<br/><small>tool aggregation · policy enforcement</small>"]
+    end
+
+    subgraph Action Plane
+        FS["filesystem<br/><small>MCP Server</small>"]
+        GIT["git<br/><small>MCP Server</small>"]
+        DB["database<br/><small>MCP Server</small>"]
+    end
+
+    A1 -->|TCP :4767| AUTH
+    A2 -->|TCP :4767| AUTH
+    A3 -->|TCP :4767| AUTH
+    AUTH --> S1
+    AUTH --> S2
+    AUTH --> S3
+    S1 --> PA
+    S2 --> PA
+    S3 --> PA
+    PA -->|MCP| FS
+    PA -->|MCP| GIT
+    PA -->|MCP| DB
+
+    style AUTH fill:#4a4dae,color:#fff
+    style PA fill:#10b981,color:#fff
+    style S1 fill:#4a4dae,color:#fff,opacity:0.8
+    style S2 fill:#4a4dae,color:#fff,opacity:0.8
+    style S3 fill:#4a4dae,color:#fff,opacity:0.8
+```
+
+## Request Flow
+
+```mermaid
+sequenceDiagram
+    participant Agent
+    participant Bridge as harbour-bridge
+    participant Daemon as Harbour Daemon
+    participant Server as MCP Server
+
+    Agent->>Bridge: MCP request (stdio)
+    Bridge->>Daemon: Forward (TCP :4767)
+
+    Note over Daemon: Verify identity from token
+    Note over Daemon: Check policy for this tool
+
+    alt Allowed
+        Daemon->>Server: Forward request
+        Server-->>Daemon: Response
+        Daemon-->>Bridge: Forward response
+        Bridge-->>Agent: MCP response (stdio)
+    else Denied
+        Daemon-->>Bridge: AUTHORIZATION_DENIED (-31001)
+        Bridge-->>Agent: Error response
+    end
+```
+
+## Entry Points
+
+Two separate commands exist by design:
+
+<CardGroup cols={2}>
+  <Card title="harbour" icon="terminal">
+    Admin CLI for the user. Manages servers, identities, policies, and the daemon. Belongs to the Action Plane.
+  </Card>
+  <Card title="harbour-bridge" icon="bridge">
+    Lightweight stdio bridge for agents. No admin capabilities. Belongs to the Cognitive Plane.
+  </Card>
+</CardGroup>
+
+`harbour-bridge` has **no admin capabilities**. The agent cannot manage servers, identities, or policies through it.
+
+## Process Isolation
+
+<CardGroup cols={2}>
+  <Card title="Stdio servers" icon="box">
+    Spawned per-client. Each agent connection gets its own server process. Full isolation between sessions.
+  </Card>
+  <Card title="Streamable HTTP servers (planned)" icon="globe">
+    Shared across clients. One process handles all agent connections.
+  </Card>
+</CardGroup>
+
+## Connection Flow
+
+<Steps>
+  <Step title="Bridge connects">
+    `harbour-bridge` opens a TCP connection to the daemon on port 4767.
+  </Step>
+  <Step title="Handshake">
+    Bridge sends `{"auth": "harbour_sk_..."}`. The daemon derives the identity by checking the token against stored hashes. The agent cannot self-declare its identity.
+  </Step>
+  <Step title="Session created">
+    The daemon loads the identity's policy, spawns per-client MCP server processes, and builds a tool→server cache.
+  </Step>
+  <Step title="MCP traffic flows">
+    Standard JSON-RPC MCP traffic flows through the harbour. Every `call_tool` is checked against the policy before forwarding.
+  </Step>
+</Steps>
+
+## GPARS Alignment
+
+| GPARS Concept | MCP Harbour |
+|---|---|
+| Cognitive Plane | Agent + harbour-bridge |
+| Action Plane | MCP servers + security policies |
+| Plane Boundary | Harbour (port authority) |
+| Security Policy | Per-identity policy files |
+| `AUTHORIZATION_DENIED` | JSON-RPC error code `-31001` |
+| `SERVER_UNAVAILABLE` | JSON-RPC error code `-31002` |
+| Identity verification | Token → identity lookup |
+| Default deny | No policy = no access |
+

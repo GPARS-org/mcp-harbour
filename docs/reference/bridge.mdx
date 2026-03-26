@@ -1,0 +1,42 @@
+---
+title: harbour-bridge
+description: Lightweight agent bridge with no admin access.
+---
+
+`harbour-bridge` is a separate entry point that connects an MCP client to the Harbour daemon. It has **no admin capabilities** — the agent cannot manage servers, identities, or policies through it.
+
+## Usage
+
+```bash
+harbour-bridge --token harbour_sk_XXXX
+harbour-bridge --token harbour_sk_XXXX --host 192.168.1.10 --port 5000
+```
+
+| Option | Required | Default | Description |
+|---|---|---|---|
+| `--token` | Yes | — | API key for authentication |
+| `--host` | No | `127.0.0.1` | Daemon host |
+| `--port` | No | `4767` | Daemon port |
+
+## MCP Client Configuration
+
+Configure your MCP client to use `harbour-bridge` as the server command:
+
+```json
+{
+  "mcpServers": {
+    "harbour": {
+      "command": "harbour-bridge",
+      "args": ["--token", "harbour_sk_XXXX"]
+    }
+  }
+}
+```
+
+This format works for Claude Desktop, VS Code, and Cursor.
+
+## Why a Separate Entry Point?
+
+The admin CLI (`harbour`) has commands to create identities, manage policies, dock servers, and control the daemon. If the agent's MCP host ran `harbour` directly, the agent would have access to all of those commands.
+
+`harbour-bridge` is intentionally minimal — stdlib only, no admin imports. It does exactly one thing: authenticate with a token and pipe MCP traffic.
