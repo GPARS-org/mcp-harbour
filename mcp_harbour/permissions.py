@@ -35,8 +35,8 @@ class PermissionEngine:
                 f"Tool '{tool_name}' on server '{server_name}' is not allowed."
             )
 
-        if matched_permission.policies and arguments:
-            self._enforce_policies(matched_permission.policies, arguments)
+        if matched_permission.policies:
+            self._enforce_policies(matched_permission.policies, arguments or {})
 
         return True
 

@@ -165,11 +165,15 @@ class TestArgumentPolicy:
             )
         assert_authorization_denied(exc_info)
 
-    def test_no_args_skips_policy(self, engine_read_only):
-        assert engine_read_only.check_permission("filesystem", "read_file")
+    def test_no_args_denied_when_policy_exists(self, engine_read_only):
+        with pytest.raises(McpError) as exc_info:
+            engine_read_only.check_permission("filesystem", "read_file")
+        assert_authorization_denied(exc_info)
 
-    def test_empty_args_skips_policy_like_none(self, engine_read_only):
-        assert engine_read_only.check_permission("filesystem", "read_file", {})
+    def test_empty_args_denied_when_policy_exists(self, engine_read_only):
+        with pytest.raises(McpError) as exc_info:
+            engine_read_only.check_permission("filesystem", "read_file", {})
+        assert_authorization_denied(exc_info)
 
     def test_regex_policy_allowed(self, engine_multi_policy):
         assert engine_multi_policy.check_permission(
