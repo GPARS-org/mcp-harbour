@@ -46,7 +46,7 @@ def sample_server():
 def sample_http_server():
     return Server(
         name="web-search",
-        command="http://localhost:3001/mcp",
+        url="http://localhost:3001/mcp",
         server_type=ServerType.http,
     )
 

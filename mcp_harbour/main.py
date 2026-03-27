@@ -28,24 +28,34 @@ app.add_typer(permit_app, name="permit", help="Manage permissions (Policies)")
 @app.command()
 def dock(
     name: str = typer.Option(..., help="Name of the server/ship"),
-    command: str = typer.Option(..., help="Full command to run the server (e.g. 'npx -y @modelcontextprotocol/server-filesystem /path')"),
-    server_type: ServerType = typer.Option(ServerType.stdio, help="Type of connection"),
+    command: Optional[str] = typer.Option(None, help="Full command to run the server (stdio)"),
+    url: Optional[str] = typer.Option(None, help="Server URL (streamable HTTP)"),
 ):
     """
     Dock (install/register) a new MCP server.
 
-    The --command should be the full command including arguments, e.g.:
-    harbour dock --name filesystem --command "npx -y @modelcontextprotocol/server-filesystem /home/user"
+    Provide --command for stdio servers or --url for HTTP servers (not both).
+
+    Examples:
+      harbour dock --name filesystem --command "npx -y @modelcontextprotocol/server-filesystem /home/user"
+      harbour dock --name remote-api --url "http://localhost:8000/mcp"
     """
+    if command and url:
+        console.print("[bold red]Error:[/bold red] Provide --command or --url, not both.")
+        raise typer.Exit(code=1)
+
+    if not command and not url:
+        console.print("[bold red]Error:[/bold red] Provide --command (stdio) or --url (http).")
+        raise typer.Exit(code=1)
+
     if config_manager.get_server(name):
         console.print(f"[bold red]Error:[/bold red] Server '{name}' already docked.")
         raise typer.Exit(code=1)
 
-    server = Server(
-        name=name,
-        command=command,
-        server_type=server_type,
-    )
+    if command:
+        server = Server(name=name, command=command, server_type=ServerType.stdio)
+    else:
+        server = Server(name=name, url=url, server_type=ServerType.http)
     config_manager.add_server(server)
     console.print(
         f"[bold green]Success:[/bold green] Server '{name}' docked successfully!"
@@ -82,7 +92,7 @@ def list_servers():
     for server in servers:
         table.add_row(
             server.name,
-            server.command,
+            server.command or server.url,
             server.server_type.value,
         )
 
@@ -100,7 +110,10 @@ def inspect(name: str):
         raise typer.Exit(code=1)
 
     console.print(f"[bold]Name:[/bold] {server.name}")
-    console.print(f"[bold]Command:[/bold] {server.command}")
+    if server.command:
+        console.print(f"[bold]Command:[/bold] {server.command}")
+    if server.url:
+        console.print(f"[bold]URL:[/bold] {server.url}")
     console.print(f"[bold]Env:[/bold] {server.env}")
     console.print(f"[bold]Type:[/bold] {server.server_type}")
 

@@ -11,20 +11,24 @@ Servers are the MCP servers you want agents to access through the harbour. Docki
 
 ### harbour dock
 
-Register a new MCP server with the harbour.
+Register a new MCP server with the harbour. Provide `--command` for stdio servers or `--url` for HTTP servers (not both).
 
 ```bash
+# Stdio server
 harbour dock --name filesystem \
   --command "npx -y @modelcontextprotocol/server-filesystem /home/user"
+
+# HTTP server
+harbour dock --name remote-api --url "http://localhost:8000/mcp"
 ```
 
-| Option | Required | Default | Description |
-|---|---|---|---|
-| `--name` | Yes | — | Unique name for the server |
-| `--command` | Yes | — | Full command to launch the server |
-| `--server-type` | No | `stdio` | `stdio` or `http` |
+| Option | Required | Description |
+|---|---|---|
+| `--name` | Yes | Unique name for the server |
+| `--command` | One of | Full command to launch a stdio server |
+| `--url` | One of | URL of a streamable HTTP server |
 
-The command should be the full command line including all arguments. The daemon splits and executes it when spawning the server process.
+Provide either `--command` or `--url`. The server type is inferred automatically.
 
 ### harbour undock
 

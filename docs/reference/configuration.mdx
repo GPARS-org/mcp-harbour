@@ -35,8 +35,12 @@ API key hashes are stored in the system keyring, not in config files.
     "filesystem": {
       "name": "filesystem",
       "command": "npx -y @modelcontextprotocol/server-filesystem /home/user",
-      "env": {},
       "server_type": "stdio"
+    },
+    "remote-api": {
+      "name": "remote-api",
+      "url": "http://localhost:8000/mcp",
+      "server_type": "http"
     }
   },
   "identities": {
@@ -53,9 +57,10 @@ API key hashes are stored in the system keyring, not in config files.
 | Field | Type | Description |
 |---|---|---|
 | `name` | `string` | Unique identifier |
-| `command` | `string` | Full launch command |
+| `command` | `string` | Full launch command (stdio servers) |
+| `url` | `string` | Server URL (HTTP servers) |
 | `env` | `object` | Extra environment variables |
-| `server_type` | `"stdio"` or `"http"` | Transport type |
+| `server_type` | `"stdio"` or `"http"` | Transport type (set automatically by `harbour dock`) |
 
 ### Identity Fields
 

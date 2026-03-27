@@ -3,6 +3,7 @@ import logging
 from typing import Dict, Optional
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
+from mcp.client.streamable_http import streamable_http_client
 from .models import Server, ServerType
 from contextlib import AsyncExitStack
 
@@ -18,6 +19,25 @@ class ServerProcess:
     async def start(self):
         logger.info(f"Starting server {self.server_config.name}...")
 
+        try:
+            if self.server_config.server_type == ServerType.http:
+                await self._start_http()
+            else:
+                await self._start_stdio()
+
+            logger.info(f"Connected to {self.server_config.name}. Initialized session.")
+
+            tools = await self.session.list_tools()
+            logger.info(
+                f"Server {self.server_config.name} provides {len(tools.tools)} tools."
+            )
+
+        except Exception as e:
+            logger.error(f"Failed to start/connect to {self.server_config.name}: {e}")
+            await self.stop()
+            raise
+
+    async def _start_stdio(self):
         import shlex
 
         parts = shlex.split(self.server_config.command)
@@ -33,26 +53,23 @@ class ServerProcess:
             env={**os.environ, **self.server_config.env},
         )
 
-        try:
-            read, write = await self.exit_stack.enter_async_context(
-                stdio_client(server_params)
-            )
-            self.session = await self.exit_stack.enter_async_context(
-                ClientSession(read, write)
-            )
-            await self.session.initialize()
+        read, write = await self.exit_stack.enter_async_context(
+            stdio_client(server_params)
+        )
+        self.session = await self.exit_stack.enter_async_context(
+            ClientSession(read, write)
+        )
+        await self.session.initialize()
 
-            logger.info(f"Connected to {self.server_config.name}. Initialized session.")
-
-            tools = await self.session.list_tools()
-            logger.info(
-                f"Server {self.server_config.name} provides {len(tools.tools)} tools."
-            )
-
-        except Exception as e:
-            logger.error(f"Failed to start/connect to {self.server_config.name}: {e}")
-            await self.stop()
-            raise
+    async def _start_http(self):
+        url = self.server_config.url
+        read, write, _ = await self.exit_stack.enter_async_context(
+            streamable_http_client(url)
+        )
+        self.session = await self.exit_stack.enter_async_context(
+            ClientSession(read, write)
+        )
+        await self.session.initialize()
 
     async def stop(self):
         logger.info(f"Stopping server {self.server_config.name}...")

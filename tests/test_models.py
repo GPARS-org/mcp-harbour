@@ -21,23 +21,25 @@ class TestServer:
         assert s.env == {}
         assert s.server_type == ServerType.stdio
 
-    def test_create_full(self):
+    def test_create_http(self):
         s = Server(
-            name="fs",
-            command="npx -y @modelcontextprotocol/server-filesystem",
-            env={"HOME": "/tmp"},
+            name="remote",
+            url="http://localhost:8000/mcp",
             server_type=ServerType.http,
         )
         assert s.server_type == ServerType.http
-        assert s.env["HOME"] == "/tmp"
+        assert s.url == "http://localhost:8000/mcp"
+        assert s.command == ""
 
     def test_missing_name_raises(self):
         with pytest.raises(ValidationError):
             Server(command="echo")
 
-    def test_missing_command_raises(self):
-        with pytest.raises(ValidationError):
-            Server(name="test")
+    def test_defaults(self):
+        s = Server(name="test")
+        assert s.command == ""
+        assert s.url == ""
+        assert s.server_type == ServerType.stdio
 
 
 class TestIdentity:
