@@ -17,6 +17,7 @@ from starlette.applications import Starlette
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 
+from . import __version__
 from .config import ConfigManager
 from .errors import authorization_denied, server_unavailable
 from .models import AgentPolicy
@@ -229,13 +230,22 @@ class HarbourGateway:
         )
         http_app = HarbourAuthenticatedStreamableHTTPApp(self, manager)
 
+        async def health(_request):
+            # Unauthenticated identity/liveness probe. Loopback-only, so exposing
+            # the service name + version here is acceptable and lets tooling
+            # confirm it is Harbour answering (not just any open port).
+            return JSONResponse({"service": "mcp-harbour", "version": __version__})
+
         @asynccontextmanager
         async def lifespan(app):
             async with manager.run():
                 yield
 
         return Starlette(
-            routes=[Route("/mcp", endpoint=http_app, methods=["GET", "POST", "DELETE"])],
+            routes=[
+                Route("/healthz", endpoint=health, methods=["GET"]),
+                Route("/mcp", endpoint=http_app, methods=["GET", "POST", "DELETE"]),
+            ],
             lifespan=lifespan,
         )
 

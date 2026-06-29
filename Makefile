@@ -6,10 +6,9 @@ all: build
 install:
 	pip install -e ".[dev]"
 
-# Build standalone binaries
+# Build standalone binary
 build:
 	python -m PyInstaller --onefile --name harbour entry_harbour.py
-	python -m PyInstaller --onefile --name harbour-service entry_service.py
 
 # Run all tests
 test:

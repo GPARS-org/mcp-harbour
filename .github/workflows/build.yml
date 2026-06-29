@@ -40,9 +40,11 @@ jobs:
       - name: Build harbour
         run: pyinstaller --onefile --name harbour --collect-all keyrings.alt entry_harbour.py
 
-      - name: Build harbour-service (Windows)
+      # Windowless daemon used by the per-user logon task so no console window
+      # appears. Same gateway as `harbour serve`; --windowed = GUI subsystem.
+      - name: Build harbourd (Windows, windowless daemon)
         if: runner.os == 'Windows'
-        run: pyinstaller --onefile --name harbour-service --collect-all keyrings.alt entry_service.py
+        run: pyinstaller --onefile --windowed --name harbourd --collect-all keyrings.alt entry_harbourd.py
 
       - name: Package (Unix)
         if: runner.os != 'Windows'
@@ -59,7 +61,7 @@ jobs:
         run: |
           mkdir release
           copy dist\harbour.exe release\
-          copy dist\harbour-service.exe release\
+          copy dist\harbourd.exe release\
           copy scripts\install.ps1 release\
           copy scripts\uninstall.ps1 release\
           Compress-Archive -Path release\* -DestinationPath mcp-harbour-${{ matrix.platform }}.zip

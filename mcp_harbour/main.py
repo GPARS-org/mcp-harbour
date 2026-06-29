@@ -154,52 +154,26 @@ def serve(
     asyncio.run(gateway.serve(serve_host, serve_port))
 
 
-def _win_query_state() -> str:
-    """Return the current Windows service state string."""
-    import subprocess
-    result = subprocess.run(
-        ["sc.exe", "query", "MCPHarbour"],
-        capture_output=True, text=True
-    )
-    for token in ("RUNNING", "STOPPED", "START_PENDING", "STOP_PENDING"):
-        if token in result.stdout:
-            return token
-    return "UNKNOWN"
+# Windows runs the daemon as a per-user logon Scheduled Task (the mirror of the
+# systemd --user unit on Linux and the LaunchAgent on macOS): it runs as the user
+# in their session, with no admin and no stored password.
+WIN_TASK_NAME = "MCPHarbour"
 
 
-def _win_sc(action: str, expect_state: str) -> str:
-    """Run sc.exe start/stop with UAC elevation fallback.
+def _harbour_up(host: str, port: int, timeout: float = 1.0) -> bool:
+    """True if a Harbour daemon (not just any listener) answers on host:port.
 
-    Returns: 'ok', 'already', 'denied', or 'failed'.
+    Probes the unauthenticated /healthz endpoint and checks the service
+    signature, so a different process holding the port is not a false positive.
     """
-    import subprocess
-    import time
-
-    state = _win_query_state()
-    if state == expect_state:
-        return "already"
-
-    result = subprocess.run(
-        ["sc.exe", action, "MCPHarbour"],
-        capture_output=True, text=True
-    )
-
-    if result.returncode != 0 and "Access is denied" in (result.stdout + result.stderr):
-        console.print("Requesting administrator permission...")
-        elevated = subprocess.run(
-            ["powershell", "-Command",
-             f'Start-Process sc.exe -ArgumentList "{action} MCPHarbour" -Verb RunAs -Wait'],
-            capture_output=True,
-        )
-        if elevated.returncode != 0:
-            return "denied"
-
-    for _ in range(10):
-        if _win_query_state() == expect_state:
-            return "ok"
-        time.sleep(1)
-
-    return "failed"
+    import json
+    import urllib.request
+    try:
+        with urllib.request.urlopen(f"http://{host}:{port}/healthz", timeout=timeout) as resp:
+            data = json.loads(resp.read() or b"{}")
+        return data.get("service") == "mcp-harbour"
+    except Exception:
+        return False
 
 
 @app.command()
@@ -214,15 +188,25 @@ def start():
         plist = f"{Path.home()}/Library/LaunchAgents/dev.mcp-harbour.daemon.plist"
         subprocess.run(["launchctl", "load", plist], check=True)
     elif sys.platform == "win32":
-        result = _win_sc("start", "RUNNING")
-        if result == "already":
-            console.print("[yellow]Daemon is already running.[/yellow]")
-            return
-        elif result == "denied":
-            console.print("[bold red]Error:[/bold red] Access denied by user.")
+        import time
+        from .config import DEFAULT_HOST, DEFAULT_PORT
+        result = subprocess.run(
+            ["schtasks", "/Run", "/TN", WIN_TASK_NAME],
+            capture_output=True, text=True,
+        )
+        if result.returncode != 0:
+            console.print(f"[bold red]Error:[/bold red] {result.stderr.strip() or 'Failed to start daemon.'}")
             raise typer.Exit(1)
-        elif result == "failed":
-            console.print("[bold red]Error:[/bold red] Failed to start daemon.")
+        # /Run only triggers the task; confirm the daemon actually came up.
+        for _ in range(20):
+            if _harbour_up(DEFAULT_HOST, DEFAULT_PORT):
+                break
+            time.sleep(0.5)
+        else:
+            console.print(
+                f"[yellow]Triggered the task, but nothing is listening on {DEFAULT_HOST}:{DEFAULT_PORT} yet. "
+                "On a headless session the daemon starts at your next logon.[/yellow]"
+            )
             raise typer.Exit(1)
     else:
         console.print("[bold red]Unsupported platform.[/bold red]")
@@ -242,15 +226,22 @@ def stop():
         plist = f"{Path.home()}/Library/LaunchAgents/dev.mcp-harbour.daemon.plist"
         subprocess.run(["launchctl", "unload", plist], check=True)
     elif sys.platform == "win32":
-        result = _win_sc("stop", "STOPPED")
-        if result == "already":
-            console.print("[yellow]Daemon is already stopped.[/yellow]")
-            return
-        elif result == "denied":
-            console.print("[bold red]Error:[/bold red] Access denied by user.")
-            raise typer.Exit(1)
-        elif result == "failed":
-            console.print("[bold red]Error:[/bold red] Failed to stop daemon.")
+        import time
+        from .config import DEFAULT_HOST, DEFAULT_PORT
+        # /End fails harmlessly when nothing is running; the port is the source of
+        # truth, so an already-stopped daemon is reported as stopped (exit 0).
+        subprocess.run(
+            ["schtasks", "/End", "/TN", WIN_TASK_NAME],
+            capture_output=True, text=True,
+        )
+        for _ in range(10):
+            if not _harbour_up(DEFAULT_HOST, DEFAULT_PORT):
+                break
+            time.sleep(0.5)
+        else:
+            console.print(
+                f"[bold red]Error:[/bold red] Daemon is still listening on {DEFAULT_HOST}:{DEFAULT_PORT}."
+            )
             raise typer.Exit(1)
     else:
         console.print("[bold red]Unsupported platform.[/bold red]")
@@ -284,11 +275,9 @@ def status():
         else:
             console.print("[yellow]Daemon is not running.[/yellow]")
     elif sys.platform == "win32":
-        result = subprocess.run(
-            ["sc", "query", "MCPHarbour"],
-            capture_output=True, text=True
-        )
-        if "RUNNING" in result.stdout:
+        # Check the daemon directly (locale-proof, unlike parsing schtasks text).
+        from .config import DEFAULT_HOST, DEFAULT_PORT
+        if _harbour_up(DEFAULT_HOST, DEFAULT_PORT):
             console.print("[bold green]Daemon is running.[/bold green]")
         else:
             console.print("[yellow]Daemon is not running.[/yellow]")

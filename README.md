@@ -32,7 +32,7 @@ curl -fsSL https://mcpharbour.ai/install.sh | bash
 irm https://mcpharbour.ai/install.ps1 | iex
 ```
 
-This downloads the binaries, registers the daemon as a system service, and starts it. No Python or package manager required.
+This downloads the binary, registers a per-user background daemon that runs as you, and starts it. No admin rights, no Python or package manager required.
 
 Or download binaries directly from [GitHub Releases](https://github.com/mcpharbour/mcpharbour/releases).
 

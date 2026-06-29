@@ -48,6 +48,27 @@ async def _post_initialize(client: httpx.AsyncClient, headers=None):
     )
 
 
+class TestHealthEndpoint:
+    @pytest.mark.asyncio
+    async def test_healthz_returns_harbour_signature(self, config_manager):
+        app = make_gateway(config_manager).create_asgi_app("127.0.0.1", 4767)
+        async with _asgi_client(app) as client:
+            response = await client.get("/healthz")
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["service"] == "mcp-harbour"
+        assert "version" in body
+
+    @pytest.mark.asyncio
+    async def test_healthz_needs_no_auth(self, config_manager):
+        # The probe must work without a Bearer token (unlike /mcp).
+        app = make_gateway(config_manager).create_asgi_app("127.0.0.1", 4767)
+        async with _asgi_client(app) as client:
+            response = await client.get("/healthz")
+        assert response.status_code == 200
+
+
 class TestHTTPAuthentication:
     @pytest.mark.asyncio
     async def test_missing_authorization(self, config_manager):

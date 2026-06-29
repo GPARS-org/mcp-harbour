@@ -1,18 +1,25 @@
 $ErrorActionPreference = "Stop"
 
 $Repo = "mcpharbour/mcpharbour"
-$ServiceName = "MCPHarbour"
+$TaskName = "MCPHarbour"
 $Platform = "windows-x64"
 $installDir = Join-Path $env:LOCALAPPDATA "mcp-harbour\bin"
 
 function Info($msg)  { Write-Host "[+] $msg" -ForegroundColor Green }
 function Warn($msg)  { Write-Host "[!] $msg" -ForegroundColor Yellow }
 function Fail($msg)  { Write-Host "[x] $msg" -ForegroundColor Red; exit 1 }
+function Test-Harbour($p) {
+    # Confirm it is Harbour answering, not just any process holding the port.
+    try {
+        $r = Invoke-RestMethod -Uri "http://127.0.0.1:$p/healthz" -TimeoutSec 1 -ErrorAction Stop
+        return ($r.service -eq 'mcp-harbour')
+    } catch { return $false }
+}
 
 if ($HarbourBinaryPath) {
     # ── Local mode: copy from provided path ────────────────────────
     $sourceDir = Split-Path -Parent (Resolve-Path $HarbourBinaryPath).Path
-    Info "Copying binaries from: $sourceDir"
+    Info "Copying binary from: $sourceDir"
 } elseif ($env:MCP_HARBOUR_LOCAL_ARCHIVE) {
     # ── Local-archive mode (testing): extract a provided .zip ──────
     if (-not (Test-Path $env:MCP_HARBOUR_LOCAL_ARCHIVE)) {
@@ -68,15 +75,24 @@ if ($HarbourBinaryPath) {
     $sourceDir = $tmpDir
 }
 
-# ── Install binaries to standard location ──────────────────────────
+# ── Install binary to standard location ────────────────────────────
 
 if (-not (Test-Path $installDir)) { New-Item -ItemType Directory -Path $installDir | Out-Null }
 
+# Stop any running daemon first so its binary isn't locked during copy (upgrades).
+if (Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue) {
+    Stop-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
+}
+for ($i = 0; $i -lt 15; $i++) {
+    if (-not (Get-Process -Name 'harbourd','harbour' -ErrorAction SilentlyContinue)) { break }
+    Stop-Process -Name 'harbourd','harbour' -Force -ErrorAction SilentlyContinue
+    Start-Sleep -Milliseconds 500
+}
+
 Copy-Item (Join-Path $sourceDir "harbour.exe") "$installDir\" -Force
 
-$svcDir = Join-Path $env:LOCALAPPDATA "mcp-harbour\svc"
-if (-not (Test-Path $svcDir)) { New-Item -ItemType Directory -Path $svcDir | Out-Null }
-Copy-Item (Join-Path $sourceDir "harbour-service.exe") "$svcDir\" -Force
+$daemonSource = Join-Path $sourceDir "harbourd.exe"
+if (Test-Path $daemonSource) { Copy-Item $daemonSource "$installDir\" -Force }
 
 if ($tmpDir -and (Test-Path $tmpDir)) { Remove-Item $tmpDir -Recurse -Force }
 
@@ -88,13 +104,16 @@ if ($userPath -notlike "*$installDir*") {
 }
 
 $HarbourBin = Join-Path $installDir "harbour.exe"
-$ServiceBin = Join-Path $env:LOCALAPPDATA "mcp-harbour\svc\harbour-service.exe"
-Info "Installed binaries to $installDir"
+$DaemonBin = Join-Path $installDir "harbourd.exe"
+Info "Installed binary to $installDir"
 
-# ── Install and start Windows service ──────────────────────────────
+# ── Register a per-user autostart (logon Scheduled Task) ───────────
+# Runs `harbour serve` as the current user in their own session — no admin,
+# no stored password. This is the Windows mirror of the systemd --user unit
+# (Linux) and the LaunchAgent (macOS).
 
 if ($env:MCP_HARBOUR_NO_SERVICE) {
-    Info "Skipping service registration (MCP_HARBOUR_NO_SERVICE set)."
+    Info "Skipping autostart registration (MCP_HARBOUR_NO_SERVICE set)."
     Info "Run the daemon manually with: harbour serve"
     Write-Host ""
     Info "Installation complete."
@@ -104,40 +123,38 @@ if ($env:MCP_HARBOUR_NO_SERVICE) {
 $logDir = Join-Path $env:APPDATA "mcp-harbour"
 if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir | Out-Null }
 
-$isAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+try {
+    # Prefer the windowless daemon (no console window); fall back to the CLI.
+    if (Test-Path $DaemonBin) {
+        $action = New-ScheduledTaskAction -Execute $DaemonBin
+    } else {
+        $action = New-ScheduledTaskAction -Execute $HarbourBin -Argument "serve"
+    }
+    $account   = "$env:USERDOMAIN\$env:USERNAME"
+    $trigger   = New-ScheduledTaskTrigger -AtLogOn -User $account
+    $principal = New-ScheduledTaskPrincipal -UserId $account -LogonType Interactive -RunLevel Limited
+    $settings  = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
+                    -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1) `
+                    -ExecutionTimeLimit (New-TimeSpan -Seconds 0)
+    Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger `
+        -Principal $principal -Settings $settings -Force | Out-Null
+    Start-ScheduledTask -TaskName $TaskName
 
-$serviceScript = @"
-`$ErrorActionPreference = 'Stop'
-`$svc = Get-Service -Name '$ServiceName' -ErrorAction SilentlyContinue
-if (`$svc) {
-    Stop-Service -Name '$ServiceName' -Force -ErrorAction SilentlyContinue
-    sc.exe delete '$ServiceName'
-    Start-Sleep -Seconds 2
-}
-& '$ServiceBin' install
-Start-Service -Name '$ServiceName'
-"@
-
-if ($isAdmin) {
-    Invoke-Expression $serviceScript
-} else {
-    Info "Requesting administrator permission to install the service..."
-    $scriptPath = Join-Path $env:TEMP "mcp-harbour-install-service.ps1"
-    $serviceScript | Out-File -FilePath $scriptPath -Encoding UTF8
-    Start-Process powershell -Verb RunAs `
-        -ArgumentList "-ExecutionPolicy Bypass -File `"$scriptPath`"" `
-        -Wait
-    Remove-Item $scriptPath -Force -ErrorAction SilentlyContinue
-}
-
-# Verify
-$check = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
-if ($check -and $check.Status -eq "Running") {
-    Info "Service installed and running on 127.0.0.1:4767"
-} elseif ($check) {
-    Warn "Service installed but not running. Try: harbour start"
-} else {
-    Warn "Service installation failed. You can start the daemon manually: harbour serve"
+    # /Run is fire-and-forget; confirm the daemon actually bound the port.
+    $up = $false
+    for ($i = 0; $i -lt 20; $i++) {
+        if (Test-Harbour 4767) { $up = $true; break }
+        Start-Sleep -Milliseconds 500
+    }
+    if ($up) {
+        Info "Registered logon task; daemon running on 127.0.0.1:4767"
+    } else {
+        Warn "Registered logon task, but the daemon is not listening on 127.0.0.1:4767 yet."
+        Warn "On a headless/non-interactive session it starts at your next logon, or run: harbour start"
+    }
+} catch {
+    Warn "Could not register the autostart task: $($_.Exception.Message)"
+    Warn "You can run the daemon manually: harbour serve"
 }
 
 Write-Host ""
