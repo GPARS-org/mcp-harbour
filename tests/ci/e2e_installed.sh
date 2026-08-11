@@ -31,13 +31,20 @@ fi
 TOKEN="$(python tests/smoke/scenario.py configure --harbour "$BIN_TMP" | sed -n 's/^TOKEN=//p')"
 
 export PYTHON_KEYRING_BACKEND=keyrings.alt.file.PlaintextKeyring
-# Linux CI has no login session; linger gives this user a systemd manager so the
-# real --user unit can run (simulating a logged-in user). macOS already has one.
+# The service-managed daemon must use the SAME (file) keyring backend as the
+# configure step, or it can't verify the token (401). Service managers do not
+# inherit this shell's env, so inject it into the platform manager. CI-headless
+# only: real users share one in-session OS keyring across configure and daemon.
 if [ "$OSNAME" = "Linux" ]; then
+  # No login session on CI; linger gives this user a systemd manager so the real
+  # --user unit runs (simulating a logged-in user).
   XDG_RUNTIME_DIR="/run/user/$(id -u)"
   export XDG_RUNTIME_DIR
   loginctl enable-linger "$USER" || true
-  systemctl --user set-environment PYTHON_KEYRING_BACKEND=keyrings.alt.file.PlaintextKeyring || true
+  systemctl --user set-environment PYTHON_KEYRING_BACKEND="$PYTHON_KEYRING_BACKEND" || true
+elif [ "$OSNAME" = "macOS" ]; then
+  # launchd agents don't inherit the step env; setenv before install loads it.
+  launchctl setenv PYTHON_KEYRING_BACKEND "$PYTHON_KEYRING_BACKEND" || true
 fi
 
 # ── Install via the real script, WITH service registration ──────────

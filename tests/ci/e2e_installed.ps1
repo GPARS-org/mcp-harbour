@@ -34,6 +34,11 @@ $out = python tests/smoke/scenario.py configure --harbour $binTmp
 $token = ($out | Select-String -Pattern '^TOKEN=(.+)$').Matches.Groups[1].Value
 
 $env:PYTHON_KEYRING_BACKEND = 'keyrings.alt.file.PlaintextKeyring'
+# The logon-task-spawned daemon must use the SAME (file) keyring backend as the
+# configure step, or it can't verify the token (401). The task inherits the
+# User-scope environment, not this shell's, so set it there too. CI-headless
+# only: real users share one in-session OS keyring across configure and daemon.
+[Environment]::SetEnvironmentVariable('PYTHON_KEYRING_BACKEND', 'keyrings.alt.file.PlaintextKeyring', 'User')
 
 # ── Install via the real script, WITH service (logon task) registration ──
 $env:MCP_HARBOUR_LOCAL_ARCHIVE = $env:ARCHIVE
