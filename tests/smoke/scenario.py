@@ -127,7 +127,8 @@ class Checks:
         return bool(self.results) and all(ok for ok, _, _ in self.results)
 
 
-def write_allure(checks: Checks, alluredir: str, name: str) -> None:
+def write_allure(checks: Checks, alluredir: str, name: str,
+                 os_label: str = None, suite: str = None) -> None:
     """Emit an Allure result file (allure2 format, read by Allure 3) mapping
     each check to a step, so the standalone scenario appears in the report."""
     Path(alluredir).mkdir(parents=True, exist_ok=True)
@@ -149,11 +150,14 @@ def write_allure(checks: Checks, alluredir: str, name: str) -> None:
         "start": checks.start_ms,
         "stop": stop,
         "steps": steps,
-        "labels": [
-            {"name": "suite", "value": "Smoke scenario"},
-            {"name": "framework", "value": "harbour-scenario"},
-            {"name": "language", "value": "python"},
-        ],
+        "labels": (
+            ([{"name": "parentSuite", "value": os_label}] if os_label else [])
+            + [
+                {"name": "suite", "value": suite or "Smoke scenario"},
+                {"name": "framework", "value": "harbour-scenario"},
+                {"name": "language", "value": "python"},
+            ]
+        ),
     }
     if failed:
         result["statusDetails"] = {"message": f"check failed: {failed}"}
@@ -243,7 +247,11 @@ def check_unauthenticated(url: str, checks: Checks) -> None:
 def finish(checks: Checks, args=None, name: str = "MCP Harbour scenario") -> int:
     alluredir = getattr(args, "alluredir", None) if args else None
     if alluredir:
-        write_allure(checks, alluredir, getattr(args, "allure_name", None) or name)
+        write_allure(
+            checks, alluredir, getattr(args, "allure_name", None) or name,
+            os_label=getattr(args, "allure_os", None),
+            suite=getattr(args, "allure_suite", None),
+        )
     print()
     if checks.ok():
         print("SCENARIO PASSED")
@@ -290,7 +298,11 @@ def cmd_configure(args) -> int:
     env = dict(os.environ)  # ambient config dir (installed default or override)
     token = setup_config(harbour, env, checks)
     if getattr(args, "alluredir", None):
-        write_allure(checks, args.alluredir, getattr(args, "allure_name", None) or "configure")
+        write_allure(
+            checks, args.alluredir, getattr(args, "allure_name", None) or "configure",
+            os_label=getattr(args, "allure_os", None),
+            suite=getattr(args, "allure_suite", None),
+        )
     if not checks.ok():
         print("SCENARIO FAILED")
         return 1
@@ -309,9 +321,26 @@ def cmd_check(args) -> int:
     return finish(checks, args, "check")
 
 
+def cmd_emit(args) -> int:
+    """Record a single pass/fail phase result into Allure, for shell-driven
+    install/build/uninstall steps that aren't Python checks."""
+    ok = (getattr(args, "status", None) or "passed") == "passed"
+    checks = Checks()
+    checks.check(ok, getattr(args, "allure_name", None) or "step")
+    if getattr(args, "alluredir", None):
+        write_allure(
+            checks, args.alluredir, getattr(args, "allure_name", None) or "step",
+            os_label=getattr(args, "allure_os", None),
+            suite=getattr(args, "allure_suite", None),
+        )
+    return 0 if ok else 1
+
+
 def _add_allure_args(p) -> None:
     p.add_argument("--alluredir", help="write an Allure result file into this dir")
     p.add_argument("--allure-name", dest="allure_name", help="name for the Allure result")
+    p.add_argument("--allure-os", dest="allure_os", help="Allure parentSuite (OS group)")
+    p.add_argument("--allure-suite", dest="allure_suite", help="Allure suite (logical phase)")
 
 
 def main() -> int:
@@ -334,15 +363,24 @@ def main() -> int:
     _add_allure_args(ck)
     ck.set_defaults(func=cmd_check)
 
+    em = sub.add_parser("emit", help="record a single pass/fail phase result into Allure")
+    em.add_argument("--status", default="passed", choices=["passed", "failed"])
+    _add_allure_args(em)
+    em.set_defaults(func=cmd_emit)
+
     # Backward-compatible default: no subcommand behaves like serve-check.
     parser.add_argument("--harbour", dest="root_harbour", help=argparse.SUPPRESS)
     parser.add_argument("--alluredir", dest="root_alluredir", help=argparse.SUPPRESS)
     parser.add_argument("--allure-name", dest="root_allure_name", help=argparse.SUPPRESS)
+    parser.add_argument("--allure-os", dest="root_allure_os", help=argparse.SUPPRESS)
+    parser.add_argument("--allure-suite", dest="root_allure_suite", help=argparse.SUPPRESS)
     args = parser.parse_args()
     if args.mode is None:
         args.harbour = args.root_harbour
         args.alluredir = args.root_alluredir
         args.allure_name = args.root_allure_name
+        args.allure_os = args.root_allure_os
+        args.allure_suite = args.root_allure_suite
         return cmd_serve_check(args)
     return args.func(args)
 

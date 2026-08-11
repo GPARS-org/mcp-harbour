@@ -1,6 +1,29 @@
+import os
 import pytest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
+
+try:
+    import allure
+except ImportError:  # allure-pytest not installed
+    allure = None
+
+
+@pytest.fixture(autouse=True)
+def _allure_grouping(request):
+    """Group Allure results by OS (parentSuite) then test layer (suite) so the
+    report reads OS -> Unit/Integration/E2E. parentSuite comes from ALLURE_OS
+    (set per matrix leg in CI); suite is derived from the test's directory."""
+    if allure is None:
+        return
+    os_label = os.environ.get("ALLURE_OS")
+    if os_label:
+        allure.dynamic.parent_suite(os_label)
+    path = str(request.node.fspath).replace("\\", "/")
+    for marker, suite in (("/unit/", "Unit"), ("/integration/", "Integration"), ("/e2e/", "E2E")):
+        if marker in path:
+            allure.dynamic.suite(suite)
+            break
 
 from mcp.server import Server as MCPServer
 from mcp.server.lowlevel.server import request_ctx

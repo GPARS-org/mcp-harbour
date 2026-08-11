@@ -1,4 +1,12 @@
-name: Test Matrix
+name: Tests
+
+# Three stages that mirror the end-user journey:
+#   1. tests    — unit + integration on all three OSes (+ npx protocol e2e)
+#   2. build    — build the binaries on all three OSes
+#   3. e2e      — run the real install script on those binaries and live-test the
+#                 installed Harbour and its service-managed daemon, then uninstall
+# All stages gate PRs. Allure results are grouped parentSuite=OS, suite=phase.
+# The report publishes only on manual dispatch.
 
 on:
   pull_request:
@@ -7,8 +15,12 @@ on:
 permissions:
   contents: read
 
+env:
+  # The frozen binary bundles keyrings.alt; select the file backend so identity
+  # creation/verification works headless on every OS.
+  PYTHON_KEYRING_BACKEND: keyrings.alt.file.PlaintextKeyring
+
 jobs:
-  # L0 — static lint of the workflow definitions themselves.
   actionlint:
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -19,16 +31,19 @@ jobs:
           bash <(curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
           ./actionlint -color
 
-  # L1 + L2 — unit and integration suite on every OS (emits Allure results).
-  pytest:
+  # ── Stage 1: tests on all three OSes ──────────────────────────────
+  tests:
     timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        include:
+          - { os: ubuntu-latest,  osname: Linux }
+          - { os: macos-latest,   osname: macOS }
+          - { os: windows-latest, osname: Windows }
     runs-on: ${{ matrix.os }}
     env:
-      PYTHON_KEYRING_BACKEND: keyrings.alt.file.PlaintextKeyring
+      ALLURE_OS: ${{ matrix.osname }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -36,21 +51,21 @@ jobs:
           python-version: "3.12"
       - name: Install
         run: pip install -e ".[dev]" keyrings.alt
-      - name: Run unit + integration tests
+      - name: Unit + integration
         run: python -m pytest tests/unit tests/integration --alluredir=allure-results -q
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: allure-results-pytest-${{ matrix.os }}
+          name: allure-results-tests-${{ matrix.osname }}
           path: allure-results
           if-no-files-found: ignore
 
-  # L3 — npx-backed end-to-end protocol test (ubuntu has Node/npx).
-  e2e:
+  # npx-backed protocol e2e (Linux only — OS-agnostic, npx is flaky on Win/mac).
+  e2e-protocol:
     timeout-minutes: 15
     runs-on: ubuntu-latest
     env:
-      PYTHON_KEYRING_BACKEND: keyrings.alt.file.PlaintextKeyring
+      ALLURE_OS: Linux
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -61,36 +76,34 @@ jobs:
           node-version: "20"
       - name: Install
         run: pip install -e ".[dev]" keyrings.alt
-      - name: Run e2e tests
+      - name: E2E (protocol)
         run: python -m pytest tests/e2e --alluredir=allure-results -q
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: allure-results-e2e
+          name: allure-results-e2e-protocol
           path: allure-results
           if-no-files-found: ignore
 
-  # L4 — reusable binary build.
+  # ── Stage 2: build the binaries on all three OSes ─────────────────
   build:
+    needs: [tests, e2e-protocol]
     uses: ./.github/workflows/build.yml
 
-  # L5 — usability scenario against the frozen binary (also emits Allure).
-  binary-smoke:
+  # ── Stage 3: real install script + live tests against the daemon ──
+  e2e-installed:
     needs: build
-    timeout-minutes: 20
+    timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
-            platform: linux-x64
-          - os: macos-latest
-            platform: darwin-arm64
-          - os: windows-latest
-            platform: windows-x64
+          - { os: ubuntu-latest,  osname: Linux,   platform: linux-x64,    ext: tar.gz }
+          - { os: macos-latest,   osname: macOS,   platform: darwin-arm64, ext: tar.gz }
+          - { os: windows-latest, osname: Windows, platform: windows-x64,  ext: zip }
     runs-on: ${{ matrix.os }}
     env:
-      PYTHON_KEYRING_BACKEND: keyrings.alt.file.PlaintextKeyring
+      ALLURE_OS: ${{ matrix.osname }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -101,36 +114,35 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: mcp-harbour-${{ matrix.platform }}
-      - name: Extract binary (Unix)
+      - name: Install + live test + uninstall (Unix)
         if: runner.os != 'Windows'
-        run: |
-          tar -xzf mcp-harbour-${{ matrix.platform }}.tar.gz
-          chmod +x harbour
-      - name: Extract binary (Windows)
-        if: runner.os == 'Windows'
-        run: Expand-Archive -Path mcp-harbour-${{ matrix.platform }}.zip -DestinationPath .
-      - name: Run scenario (Unix)
-        if: runner.os != 'Windows'
-        run: python tests/smoke/scenario.py serve-check --harbour ./harbour --alluredir allure-results --allure-name "binary-smoke (${{ matrix.platform }})"
-      - name: Run scenario (Windows)
+        shell: bash
+        env:
+          ARCHIVE: ${{ github.workspace }}/mcp-harbour-${{ matrix.platform }}.${{ matrix.ext }}
+          OSNAME: ${{ matrix.osname }}
+          PLATFORM: ${{ matrix.platform }}
+        run: bash tests/ci/e2e_installed.sh
+      - name: Install + live test + uninstall (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
-        run: python tests/smoke/scenario.py serve-check --harbour .\harbour.exe --alluredir allure-results --allure-name "binary-smoke (${{ matrix.platform }})"
+        env:
+          ARCHIVE: ${{ github.workspace }}\mcp-harbour-${{ matrix.platform }}.${{ matrix.ext }}
+          OSNAME: ${{ matrix.osname }}
+          PLATFORM: ${{ matrix.platform }}
+        run: pwsh tests/ci/e2e_installed.ps1
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: allure-results-binary-${{ matrix.platform }}
+          name: allure-results-installed-${{ matrix.platform }}
           path: allure-results
           if-no-files-found: ignore
 
-  # Generate this run's Allure 3 report, publish it under runs/<run-number>/
-  # on the gh-pages branch (keeping prior runs), and regenerate the landing
-  # page that lists every run. Publishing only happens on manual dispatch —
-  # pull requests run the suite as validation but do not publish. Pages must
-  # serve the gh-pages branch (Settings → Pages → Deploy from a branch → gh-pages / root).
+  # Generate this run's Allure 3 report, publish it under runs/<run-number>/ on
+  # the gh-pages branch (keeping prior runs), and regenerate the landing page.
+  # Dispatch-only: PRs run the suite as validation but do not publish.
   report:
     if: github.event_name == 'workflow_dispatch'
-    needs: [pytest, e2e, binary-smoke]
+    needs: [tests, e2e-protocol, e2e-installed]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -161,8 +173,6 @@ jobs:
         run: |
           mkdir -p "publish/runs/${{ github.run_number }}"
           cp -r run-report/. "publish/runs/${{ github.run_number }}/"
-          # Seed runs.json from the existing gh-pages branch (source of truth,
-          # not the CDN); empty list on the first run.
           if git fetch origin gh-pages --depth=1 2>/dev/null; then
             git show origin/gh-pages:runs.json > publish/runs.json 2>/dev/null || echo "[]" > publish/runs.json
           else
@@ -185,3 +195,35 @@ jobs:
           publish_dir: publish
           publish_branch: gh-pages
           keep_files: true
+
+  # Real self-update against published releases (network path). Dispatch-only.
+  self-update:
+    if: github.event_name == 'workflow_dispatch'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install previous release then update (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          MCP_HARBOUR_NO_SERVICE=1 bash scripts/install.sh
+          BIN="$HOME/.local/bin/harbour"
+          "$BIN" version
+          "$BIN" update --check
+          "$BIN" update --yes
+          "$BIN" version
+      - name: Install previous release then update (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $env:MCP_HARBOUR_NO_SERVICE = "1"
+          powershell -ExecutionPolicy Bypass -File scripts/install.ps1
+          $bin = Join-Path $env:LOCALAPPDATA "mcp-harbour\bin\harbour.exe"
+          & $bin version
+          & $bin update --check
+          & $bin update --yes
+          & $bin version
