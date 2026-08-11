@@ -76,6 +76,8 @@ jobs:
           node-version: "20"
       - name: Install
         run: pip install -e ".[dev]" keyrings.alt
+      - name: Pre-warm npx downstream (cache the package off the timed path)
+        run: timeout 120 npx -y @modelcontextprotocol/server-everything </dev/null >/dev/null 2>&1 || true
       - name: E2E (protocol)
         run: python -m pytest tests/e2e --alluredir=allure-results -q
       - uses: actions/upload-artifact@v4
