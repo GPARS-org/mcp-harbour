@@ -22,7 +22,7 @@ ARCH=$(uname -m)
 case "${OS}-${ARCH}" in
     Linux-x86_64)  PLATFORM="linux-x64" ;;
     Darwin-arm64)  PLATFORM="darwin-arm64" ;;
-    Darwin-x86_64) PLATFORM="darwin-arm64" ;; # Rosetta
+    Darwin-x86_64) PLATFORM="darwin-arm64" ;; # x86_64 Python on Apple Silicon; native Intel Macs unsupported
     *) error "Unsupported platform: ${OS}-${ARCH}" ;;
 esac
 

@@ -44,6 +44,9 @@ def update(
     yes: bool = typer.Option(False, "--yes", "-y", help="Install without confirmation"),
 ):
     """Update Harbour from a GitHub release (latest by default)."""
+    import logging
+    # Surface updater warnings (e.g. skipped checksum verification) on stderr.
+    logging.basicConfig(level=logging.WARNING, format="%(levelname)s: %(message)s")
     try:
         info = update_binary(tag=tag, check_only=True, force=force)
     except UpdateError as e:
@@ -57,7 +60,9 @@ def update(
             console.print(f"[green]Harbour is up to date:[/green] {__version__}")
         return
 
-    if not info.update_available and not force:
+    # An explicit --tag is a request to install that exact version (a downgrade or
+    # reinstall), so only short-circuit "up to date" when no tag was named.
+    if not info.update_available and not force and tag is None:
         console.print(f"[green]Harbour is already up to date:[/green] {__version__}")
         return
 

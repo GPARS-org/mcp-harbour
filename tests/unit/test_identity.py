@@ -37,3 +37,28 @@ class TestResolveIdentityFromToken:
 
         gateway = make_gateway(config_manager)
         assert gateway._resolve_identity_from_token(token[:20]) is None
+
+    def test_cached_token_is_revoked_when_key_rotates(self, config_manager):
+        # A resolved token is cached to skip bcrypt on repeat requests; rotating
+        # the identity's key must invalidate that cache so the old token is denied.
+        token = config_manager.add_identity("agent")
+        gateway = make_gateway(config_manager)
+
+        assert gateway._resolve_identity_from_token(token) == "agent"  # populates cache
+
+        config_manager.remove_identity("agent")
+        config_manager.add_identity("agent")  # same name, new key
+        config_manager.reload()
+
+        assert gateway._resolve_identity_from_token(token) is None
+
+    def test_cached_token_is_revoked_when_identity_deleted(self, config_manager):
+        token = config_manager.add_identity("agent")
+        gateway = make_gateway(config_manager)
+
+        assert gateway._resolve_identity_from_token(token) == "agent"
+
+        config_manager.remove_identity("agent")
+        config_manager.reload()
+
+        assert gateway._resolve_identity_from_token(token) is None

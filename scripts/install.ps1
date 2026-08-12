@@ -15,6 +15,18 @@ function Test-Harbour($p) {
         return ($r.service -eq 'mcp-harbour')
     } catch { return $false }
 }
+function Install-Binary($src, $destDir, $name) {
+    $dest = Join-Path $destDir $name
+    if (Test-Path $dest) {
+        # Windows can't overwrite a running .exe, but it CAN rename it. Moving the
+        # old one aside is what lets `harbour update` replace the very binary that
+        # is running the update, without killing the updater process.
+        $old = "$dest.old"
+        Remove-Item $old -Force -ErrorAction SilentlyContinue
+        try { Move-Item $dest $old -Force -ErrorAction Stop } catch {}
+    }
+    Copy-Item $src $dest -Force
+}
 
 if ($HarbourBinaryPath) {
     # ── Local mode: copy from provided path ────────────────────────
@@ -79,20 +91,22 @@ if ($HarbourBinaryPath) {
 
 if (-not (Test-Path $installDir)) { New-Item -ItemType Directory -Path $installDir | Out-Null }
 
-# Stop any running daemon first so its binary isn't locked during copy (upgrades).
+# Stop the running daemon (harbourd) so its binary isn't locked during copy.
+# Do NOT kill 'harbour': during `harbour update` the running updater IS harbour.exe,
+# and killing it would abort the update. The CLI is replaced via rename-then-copy.
 if (Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue) {
     Stop-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
 }
 for ($i = 0; $i -lt 15; $i++) {
-    if (-not (Get-Process -Name 'harbourd','harbour' -ErrorAction SilentlyContinue)) { break }
-    Stop-Process -Name 'harbourd','harbour' -Force -ErrorAction SilentlyContinue
+    if (-not (Get-Process -Name 'harbourd' -ErrorAction SilentlyContinue)) { break }
+    Stop-Process -Name 'harbourd' -Force -ErrorAction SilentlyContinue
     Start-Sleep -Milliseconds 500
 }
 
-Copy-Item (Join-Path $sourceDir "harbour.exe") "$installDir\" -Force
+Install-Binary (Join-Path $sourceDir "harbour.exe") $installDir "harbour.exe"
 
 $daemonSource = Join-Path $sourceDir "harbourd.exe"
-if (Test-Path $daemonSource) { Copy-Item $daemonSource "$installDir\" -Force }
+if (Test-Path $daemonSource) { Install-Binary $daemonSource $installDir "harbourd.exe" }
 
 if ($tmpDir -and (Test-Path $tmpDir)) { Remove-Item $tmpDir -Recurse -Force }
 

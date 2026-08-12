@@ -1,5 +1,6 @@
 import os
 import pytest
+from collections import OrderedDict
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
@@ -197,6 +198,8 @@ def make_gateway(config_manager) -> HarbourGateway:
     gateway.config_manager = config_manager
     gateway.daemon = HarbourDaemon()
     gateway.session_server = MCPServer("mcp-harbour")
+    gateway._auth_cache = OrderedDict()
+    gateway._auth_cache_max = 4096
     gateway._register_handlers()
     return gateway
 

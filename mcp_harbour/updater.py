@@ -1,5 +1,6 @@
 import hashlib
 import json
+import logging
 import os
 import platform
 import shutil
@@ -12,6 +13,8 @@ from pathlib import Path
 from typing import Optional
 
 from . import __version__
+
+logger = logging.getLogger("mcp_harbour.updater")
 
 REPO = "mcpharbour/mcpharbour"
 GITHUB_API = f"https://api.github.com/repos/{REPO}"
@@ -63,6 +66,9 @@ def platform_asset_name(system: Optional[str] = None, machine: Optional[str] = N
 
     if system == "Linux" and machine in {"x86_64", "amd64"}:
         return "mcp-harbour-linux-x64.tar.gz"
+    # Only an arm64 macOS build is published. x86_64/amd64 here means an x86_64
+    # Python on Apple Silicon (e.g. under Rosetta), whose hardware runs the arm64
+    # binary natively; genuine Intel Macs are not supported.
     if system == "Darwin" and machine in {"arm64", "aarch64", "x86_64", "amd64"}:
         return "mcp-harbour-darwin-arm64.tar.gz"
     if system == "Windows" and machine in {"amd64", "x86_64"}:
@@ -186,6 +192,11 @@ def download_installer(
         checksums = None
     if checksums:
         verify_checksum(installer_path, checksums)
+    else:
+        logger.warning(
+            "checksums.txt not available for %s; skipping installer integrity verification.",
+            tag,
+        )
 
     return installer_path
 

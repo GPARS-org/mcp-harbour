@@ -1,9 +1,11 @@
+import hashlib
 import logging
 import socket
+from collections import OrderedDict
 from contextlib import asynccontextmanager
 from fnmatch import fnmatch
 from http import HTTPStatus
-from typing import Dict, List, Optional
+from typing import List, Optional
 
 import bcrypt
 import keyring
@@ -31,7 +33,10 @@ class HarbourAuthenticatedStreamableHTTPApp:
     def __init__(self, gateway: "HarbourGateway", manager: StreamableHTTPSessionManager):
         self.gateway = gateway
         self.manager = manager
-        self._session_identities: Dict[str, str] = {}
+        # Bounded: clients that disconnect without a DELETE never remove their
+        # entry, so cap it (LRU) to avoid unbounded growth over the daemon's life.
+        self._session_identities: "OrderedDict[str, str]" = OrderedDict()
+        self._max_sessions = 4096
 
     async def __call__(self, scope, receive, send):
         headers = {
@@ -69,6 +74,9 @@ class HarbourAuthenticatedStreamableHTTPApp:
 
         if response_session_id:
             self._session_identities[response_session_id] = identity_name
+            self._session_identities.move_to_end(response_session_id)
+            while len(self._session_identities) > self._max_sessions:
+                self._session_identities.popitem(last=False)
         if scope.get("method") == "DELETE" and request_session_id:
             self._session_identities.pop(request_session_id, None)
 
@@ -86,6 +94,10 @@ class HarbourGateway:
         self.config_manager = ConfigManager()
         self.daemon = HarbourDaemon()
         self.session_server = Server("mcp-harbour")
+        # token sha256 -> (identity, stored key hash). Lets repeat requests skip the
+        # per-request O(identities) bcrypt; invalidated when the stored hash changes.
+        self._auth_cache: "OrderedDict[str, tuple[str, str]]" = OrderedDict()
+        self._auth_cache_max = 4096
         self._register_handlers()
 
     def _register_handlers(self) -> None:
@@ -110,10 +122,30 @@ class HarbourGateway:
         return identity_name
 
     def _resolve_identity_from_token(self, token: str) -> Optional[str]:
+        token_hash = hashlib.sha256(token.encode()).hexdigest()
+
+        cached = self._auth_cache.get(token_hash)
+        if cached is not None:
+            name, cached_key = cached
+            try:
+                current_key = keyring.get_password("mcp-harbour", name)
+            except Exception:
+                current_key = None
+            # Trust the cache only while the identity's stored hash is unchanged,
+            # so a deleted or rotated key invalidates the cached token at once.
+            if current_key is not None and current_key == cached_key:
+                self._auth_cache.move_to_end(token_hash)
+                return name
+            self._auth_cache.pop(token_hash, None)
+
         for name in self.config_manager.config.identities:
             try:
                 hashed_key = keyring.get_password("mcp-harbour", name)
                 if hashed_key and bcrypt.checkpw(token.encode(), hashed_key.encode()):
+                    self._auth_cache[token_hash] = (name, hashed_key)
+                    self._auth_cache.move_to_end(token_hash)
+                    while len(self._auth_cache) > self._auth_cache_max:
+                        self._auth_cache.popitem(last=False)
                     return name
             except Exception as e:
                 logger.error(f"Keyring error checking identity '{name}': {e}")
