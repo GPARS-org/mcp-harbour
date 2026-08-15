@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/mcpharbour/mcpharbour/releases/tag/v0.1.1"><img src="https://img.shields.io/badge/version-v0.1.1-darkgreen" alt="Version" /></a>
+  <a href="https://github.com/mcpharbour/mcpharbour/releases/latest"><img src="https://img.shields.io/github/v/release/mcpharbour/mcpharbour?color=darkgreen&label=version" alt="Version" /></a>
   <a href="https://docs.mcpharbour.ai"><img src="https://img.shields.io/badge/docs-latest-indigo" alt="Docs" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License"></a>
 </p>
@@ -78,7 +78,7 @@ Agent → Streamable HTTP /mcp → Harbour Daemon → MCP Servers
 - **Default deny** — no policy means no access
 - **Identity from token** — agents cannot self-assert their identity
 - **Per-agent policies** — whitelist of servers, tools, and argument constraints
-- **Process isolation** — each agent gets its own MCP server processes
+- **Isolation by policy** — one shared daemon; each agent is confined by its policy, not by separate server processes
 - **GPARS error codes** — `AUTHORIZATION_DENIED` (-31001) and `SERVER_UNAVAILABLE` (-31002)
 
 ## Documentation

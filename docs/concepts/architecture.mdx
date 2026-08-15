@@ -128,11 +128,13 @@ sequenceDiagram
 
 Agents connect to `/mcp`; they do not run the `harbour` admin CLI.
 
-## Process isolation
+## Server processes
+
+Docked servers are shared by all agents — the daemon runs one set of server processes and isolates agents by policy, not by per-agent processes.
 
 <CardGroup cols={2}>
   <Card title="Stdio servers" icon="box" color="#10b981">
-    Started and managed by the daemon as docked server processes.
+    Started and managed by the daemon as shared docked server processes.
   </Card>
   <Card title="Streamable HTTP servers" icon="globe" color="#10b981">
     Connected by the daemon as shared docked server sessions.

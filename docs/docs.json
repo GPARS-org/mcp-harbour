@@ -56,13 +56,19 @@
         "group": "Reference",
         "pages": [
           "reference/cli",
-          "reference/bridge",
+          "reference/mcp-endpoint",
           "reference/configuration",
           "reference/policy-format"
         ]
       }
     ]
   },
+  "redirects": [
+    {
+      "source": "/reference/bridge",
+      "destination": "/reference/mcp-endpoint"
+    }
+  ],
   "footer": {
     "socials": {
       "github": "https://github.com/mcpharbour/mcpharbour"
