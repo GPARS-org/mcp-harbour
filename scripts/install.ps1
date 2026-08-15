@@ -103,10 +103,26 @@ for ($i = 0; $i -lt 15; $i++) {
     Start-Sleep -Milliseconds 500
 }
 
+# If something still serves on 4767 (a stray daemon, or a foreground
+# `harbour serve`), stop that specific process by PID — never by image name, so
+# we never kill the running updater (`harbour update`), which does not hold 4767.
+if (Test-Harbour 4767) {
+    try {
+        $owners = (Get-NetTCPConnection -LocalPort 4767 -State Listen -ErrorAction SilentlyContinue).OwningProcess
+        foreach ($procId in ($owners | Sort-Object -Unique)) {
+            if ($procId -and $procId -ne $PID) { Stop-Process -Id $procId -Force -ErrorAction SilentlyContinue }
+        }
+    } catch {}
+}
+
 Install-Binary (Join-Path $sourceDir "harbour.exe") $installDir "harbour.exe"
 
 $daemonSource = Join-Path $sourceDir "harbourd.exe"
 if (Test-Path $daemonSource) { Install-Binary $daemonSource $installDir "harbourd.exe" }
+
+# Sweep leftover *.old images from prior self-updates (the current update's
+# harbour.exe.old is still locked by the running updater and is cleared next run).
+Remove-Item (Join-Path $installDir "*.old") -Force -ErrorAction SilentlyContinue
 
 if ($tmpDir -and (Test-Path $tmpDir)) { Remove-Item $tmpDir -Recurse -Force }
 

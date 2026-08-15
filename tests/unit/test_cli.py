@@ -9,10 +9,22 @@ runner = CliRunner()
 
 
 def test_version_command():
+    from mcp_harbour import __version__
+
     result = runner.invoke(app, ["version"])
 
     assert result.exit_code == 0
-    assert "0.1.1" in result.output
+    assert __version__ in result.output
+
+
+def test_package_version_matches_distribution_metadata():
+    # __init__.py is the single source; pyproject derives from it. Guard the two
+    # against drifting apart on a future bump.
+    import importlib.metadata
+
+    from mcp_harbour import __version__
+
+    assert importlib.metadata.version("mcp-harbour") == __version__
 
 
 def test_update_check_reports_available_update():

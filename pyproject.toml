@@ -1,6 +1,6 @@
 [project]
 name = "mcp-harbour"
-version = "0.1.2"
+dynamic = ["version"]
 description = "The port authority for your MCP servers"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -29,3 +29,9 @@ dev = [
 [build-system]
 requires = ["setuptools>=68.0"]
 build-backend = "setuptools.build_meta"
+
+# Single source of truth for the version: mcp_harbour/__init__.py __version__.
+# Read at build time (AST, no import), so the frozen binary has no runtime
+# importlib.metadata dependency.
+[tool.setuptools.dynamic]
+version = {attr = "mcp_harbour.__version__"}

@@ -131,9 +131,15 @@ class HarbourGateway:
                 current_key = keyring.get_password("mcp-harbour", name)
             except Exception:
                 current_key = None
-            # Trust the cache only while the identity's stored hash is unchanged,
-            # so a deleted or rotated key invalidates the cached token at once.
-            if current_key is not None and current_key == cached_key:
+            # Trust the cache only while the identity is still in config AND its
+            # stored hash is unchanged, so a removed or rotated key invalidates the
+            # cached token at once (config membership is the authoritative source,
+            # matching the miss-loop below).
+            if (
+                current_key is not None
+                and current_key == cached_key
+                and name in self.config_manager.config.identities
+            ):
                 self._auth_cache.move_to_end(token_hash)
                 return name
             self._auth_cache.pop(token_hash, None)

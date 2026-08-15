@@ -1,6 +1,7 @@
 import os
 import sys
 import json
+import logging
 import secrets
 import string
 from pathlib import Path
@@ -8,6 +9,8 @@ from typing import Optional, List
 import bcrypt
 import keyring
 from .models import Config, Server, Identity, AgentPolicy, ToolPermission, ArgumentPolicy, ServerType
+
+logger = logging.getLogger("mcp_harbour.config")
 
 
 def _get_config_dir() -> Path:
@@ -113,8 +116,12 @@ class ConfigManager:
             raise ValueError(f"Identity '{name}' not found.")
         try:
             keyring.delete_password("mcp-harbour", name)
-        except Exception:
-            pass
+        except keyring.errors.PasswordDeleteError:
+            pass  # entry already absent — nothing to remove
+        except Exception as e:
+            # Don't fail the removal, but surface it: a lingering keyring entry
+            # must not be able to authenticate a removed identity.
+            logger.warning("Could not delete keyring entry for '%s': %s", name, e)
         if name in self.config.identities:
             del self.config.identities[name]
             self.save_config()
