@@ -40,8 +40,52 @@ jobs:
             uninstall.sh \
             uninstall.ps1 > checksums.txt
 
+      - name: Prepare release notes
+        id: notes
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          # Extract this version's section from CHANGELOG.md (from its heading up
+          # to the next version heading).
+          awk -v ver="$version" '
+            $0 ~ "^## \\[" ver "\\]" { grab=1; next }
+            grab && /^## \[/ { exit }
+            grab { print }
+          ' CHANGELOG.md > notes.md || true
+          sed -i -e '/./,$!d' notes.md   # drop leading blank lines
+          gen=false
+          if ! grep -q '[^[:space:]]' notes.md; then
+            echo "::warning::No CHANGELOG.md entry for $version; falling back to auto-generated notes."
+            gen=true
+            : > notes.md
+          fi
+          # Constant install/verify footer appended to every release.
+          cat >> notes.md <<'EOF'
+
+---
+
+## Install
+
+**Linux / macOS**
+
+```bash
+curl -fsSL https://mcpharbour.ai/install.sh | bash
+```
+
+**Windows (PowerShell)**
+
+```powershell
+irm https://mcpharbour.ai/install.ps1 | iex
+```
+
+Already running Harbour? Run `harbour update`. Every archive and script is checksummed (SHA-256) in `checksums.txt`.
+EOF
+          echo "generate=$gen" >> "$GITHUB_OUTPUT"
+
       - uses: softprops/action-gh-release@v2
         with:
+          body_path: notes.md
+          generate_release_notes: ${{ steps.notes.outputs.generate }}
           files: |
             mcp-harbour-linux-x64.tar.gz
             mcp-harbour-darwin-arm64.tar.gz

@@ -1,0 +1,41 @@
+# Changelog
+
+All notable changes to MCP Harbour are documented here. The format follows
+[Keep a Changelog](https://keepachangelog.com/), and the project uses
+[Semantic Versioning](https://semver.org/).
+
+The release workflow publishes the section for the tagged version as its GitHub
+release notes, so update the entry for the version you're about to tag **before**
+tagging it.
+
+## [Unreleased]
+
+## [0.1.2] - 2026-08-15
+
+### Added
+- `harbour update` and `harbour version` — in-place self-update from the latest
+  GitHub release, with SHA-256 checksum verification of downloaded assets.
+
+### Changed
+- Agents now connect over **Streamable HTTP** to the daemon's `/mcp` endpoint
+  with a Bearer token.
+- The daemon runs as the invoking user on every platform — `systemd --user`
+  (Linux), a launchd agent (macOS), and a logon Scheduled Task (Windows) —
+  instead of a privileged system service. No admin rights required; it starts at
+  login and restarts on failure.
+
+### Removed
+- The standalone bridge. Point MCP clients at `http://127.0.0.1:4767/mcp` with an
+  `Authorization: Bearer <api-key>` header instead.
+
+## [0.1.1] - 2026-05-10
+
+### Fixed
+- Documentation corrections.
+
+## [0.1.0] - 2026-04-10
+
+### Added
+- Initial release: dock MCP servers behind a single endpoint, per-agent
+  identities and API keys, and default-deny per-agent policies with tool and
+  argument-level control.
