@@ -10,6 +10,14 @@ tagging it.
 
 ## [Unreleased]
 
+### Fixed
+- Docking or undocking a server while the daemon is running now takes effect
+  immediately, instead of requiring a daemon restart before the server's tools
+  appear. The daemon owns server lifecycle: `harbour dock`/`undock` notify it
+  over a loopback control endpoint, and it reconciles the running servers against
+  the docked config (start / stop / restart). A periodic supervisor also retries
+  failed starts.
+
 ## [0.1.2] - 2026-08-15
 
 ### Added

@@ -1,4 +1,6 @@
+import asyncio
 import hashlib
+import hmac
 import logging
 import socket
 from collections import OrderedDict
@@ -20,7 +22,7 @@ from starlette.responses import JSONResponse
 from starlette.routing import Route
 
 from . import __version__
-from .config import ConfigManager
+from .config import ConfigManager, get_or_create_control_token
 from .errors import authorization_denied, server_unavailable
 from .models import AgentPolicy
 from .permissions import PermissionEngine
@@ -98,6 +100,8 @@ class HarbourGateway:
         # per-request O(identities) bcrypt; invalidated when the stored hash changes.
         self._auth_cache: "OrderedDict[str, tuple[str, str]]" = OrderedDict()
         self._auth_cache_max = 4096
+        # Serializes lifecycle reconciliation (startup, control plane, supervisor).
+        self._reconcile_lock = asyncio.Lock()
         self._register_handlers()
 
     def _register_handlers(self) -> None:
@@ -241,12 +245,65 @@ class HarbourGateway:
             logger.error(f"Error calling tool '{name}' on '{server_name}': {e}")
             raise server_unavailable(server_name)
 
+    async def reconcile_servers(self) -> dict:
+        """The daemon's single lifecycle primitive: make the running shared servers
+        match the docked config — start newly docked servers, stop undocked ones,
+        and restart servers whose spec changed or whose session died. Idempotent;
+        driven at startup, by the control plane on config changes, and periodically.
+        """
+        async with self._reconcile_lock:
+            desired = {s.name: s for s in self.config_manager.list_servers()}
+            started, stopped, failed = [], [], []
+
+            for name in list(self.daemon.shared_processes.keys()):
+                if name not in desired:
+                    await self.daemon.stop_shared_server(name)
+                    stopped.append(name)
+
+            for name, server in desired.items():
+                proc = self.daemon.get_shared_process(name)
+                if proc is not None and proc.session is not None and proc.server_config == server:
+                    continue  # already running with the current spec
+                if proc is not None:
+                    await self.daemon.stop_shared_server(name)  # changed or dead -> restart
+                try:
+                    await self.daemon.start_shared_server(server)
+                    started.append(name)
+                except Exception as e:
+                    logger.error(f"Failed to start docked server '{name}': {e}")
+                    failed.append(name)
+
+            return {
+                "started": started,
+                "stopped": stopped,
+                "failed": failed,
+                "running": sorted(self.daemon.shared_processes.keys()),
+            }
+
     async def start_shared_processes(self):
-        for server in self.config_manager.list_servers():
+        # Backward-compatible name for the reconcile primitive.
+        await self.reconcile_servers()
+
+    async def _reconcile_loop(self, interval: float = 30.0):
+        """Supervisor backstop: periodically re-apply the docked config so failed
+        starts are retried and any drift is corrected without a restart."""
+        while True:
+            await asyncio.sleep(interval)
             try:
-                await self.daemon.start_shared_server(server)
+                self.config_manager.reload()
+                await self.reconcile_servers()
             except Exception as e:
-                logger.error(f"Failed to start docked server '{server.name}': {e}")
+                logger.error(f"Periodic reconcile failed: {e}")
+
+    def _check_control_token(self, token: Optional[str]) -> bool:
+        if not token:
+            return False
+        try:
+            expected = get_or_create_control_token()
+        except Exception as e:
+            logger.error(f"Could not read control token: {e}")
+            return False
+        return hmac.compare_digest(token, expected)
 
     def _security_settings(self, host: str, port: int) -> TransportSecuritySettings:
         allowed_hosts = [
@@ -274,6 +331,20 @@ class HarbourGateway:
             # confirm it is Harbour answering (not just any open port).
             return JSONResponse({"service": "mcp-harbour", "version": __version__})
 
+        async def control_reconcile(request):
+            # Control plane: the CLI (dock/undock) calls this so the daemon applies
+            # lifecycle changes immediately. Authenticated with the control token —
+            # agent tokens never match, so they cannot drive lifecycle.
+            token = self._extract_bearer_token(request.headers.get("authorization"))
+            if not self._check_control_token(token):
+                return JSONResponse(
+                    {"error": "Unauthorized"},
+                    status_code=HTTPStatus.UNAUTHORIZED,
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+            self.config_manager.reload()
+            return JSONResponse(await self.reconcile_servers())
+
         @asynccontextmanager
         async def lifespan(app):
             async with manager.run():
@@ -282,6 +353,7 @@ class HarbourGateway:
         return Starlette(
             routes=[
                 Route("/healthz", endpoint=health, methods=["GET"]),
+                Route("/control/reconcile", endpoint=control_reconcile, methods=["POST"]),
                 Route("/mcp", endpoint=http_app, methods=["GET", "POST", "DELETE"]),
             ],
             lifespan=lifespan,
@@ -289,7 +361,8 @@ class HarbourGateway:
 
     async def serve(self, host: str, port: int):
         """Run the gateway over Streamable HTTP."""
-        await self.start_shared_processes()
+        self.config_manager.reload()
+        await self.reconcile_servers()
 
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
             try:
@@ -309,4 +382,12 @@ class HarbourGateway:
         logger.info(f"Listening on http://{host}:{port}/mcp")
         config = uvicorn.Config(app, host=host, port=port, log_level="info")
         server = uvicorn.Server(config)
-        await server.serve()
+        supervisor = asyncio.create_task(self._reconcile_loop())
+        try:
+            await server.serve()
+        finally:
+            supervisor.cancel()
+            try:
+                await supervisor
+            except asyncio.CancelledError:
+                pass

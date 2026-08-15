@@ -1,3 +1,4 @@
+import asyncio
 import os
 import pytest
 from collections import OrderedDict
@@ -200,6 +201,7 @@ def make_gateway(config_manager) -> HarbourGateway:
     gateway.session_server = MCPServer("mcp-harbour")
     gateway._auth_cache = OrderedDict()
     gateway._auth_cache_max = 4096
+    gateway._reconcile_lock = asyncio.Lock()
     gateway._register_handlers()
     return gateway
 

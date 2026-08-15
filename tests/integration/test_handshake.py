@@ -69,6 +69,44 @@ class TestHealthEndpoint:
         assert response.status_code == 200
 
 
+class TestControlPlane:
+    @pytest.mark.asyncio
+    async def test_reconcile_requires_control_token(self, config_manager):
+        app = make_gateway(config_manager).create_asgi_app("127.0.0.1", 4767)
+        async with _asgi_client(app) as client:
+            no_auth = await client.post("/control/reconcile")
+            bad = await client.post(
+                "/control/reconcile", headers={"Authorization": "Bearer harbour_sk_wrong"}
+            )
+        assert no_auth.status_code == 401
+        assert bad.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_reconcile_with_control_token(self, config_manager):
+        from mcp_harbour.config import get_or_create_control_token
+
+        token = get_or_create_control_token()
+        app = make_gateway(config_manager).create_asgi_app("127.0.0.1", 4767)
+        async with _asgi_client(app) as client:
+            resp = await client.post(
+                "/control/reconcile", headers={"Authorization": f"Bearer {token}"}
+            )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert set(body) >= {"started", "stopped", "failed", "running"}
+
+    @pytest.mark.asyncio
+    async def test_agent_token_cannot_drive_control_plane(self, config_manager):
+        # An agent's Bearer token must not be accepted on /control/*.
+        agent_token = config_manager.add_identity("agent")
+        app = make_gateway(config_manager).create_asgi_app("127.0.0.1", 4767)
+        async with _asgi_client(app) as client:
+            resp = await client.post(
+                "/control/reconcile", headers={"Authorization": f"Bearer {agent_token}"}
+            )
+        assert resp.status_code == 401
+
+
 class TestHTTPAuthentication:
     @pytest.mark.asyncio
     async def test_missing_authorization(self, config_manager):

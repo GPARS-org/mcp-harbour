@@ -120,6 +120,42 @@ class TestSharedProcesses:
             call(broken),
         ], any_order=False)
 
+    @pytest.mark.asyncio
+    async def test_reconcile_applies_dock_and_undock_live(self, config_manager):
+        # A server docked or undocked while the daemon runs must take effect on the
+        # next reconcile — without a restart, and without churning already-running,
+        # unchanged servers.
+        config_manager.add_server("A", command="echo")
+        gateway = make_gateway(config_manager)
+
+        async def start_side_effect(server):
+            proc = make_mock_process(server.name, ["t"])
+            proc.server_config = server
+            gateway.daemon.shared_processes[server.name] = proc
+
+        async def stop_side_effect(name):
+            gateway.daemon.shared_processes.pop(name, None)
+
+        gateway.daemon.start_shared_server = AsyncMock(side_effect=start_side_effect)
+        gateway.daemon.stop_shared_server = AsyncMock(side_effect=stop_side_effect)
+
+        await gateway.reconcile_servers()
+        assert set(gateway.daemon.shared_processes) == {"A"}
+        assert gateway.daemon.start_shared_server.await_count == 1
+
+        # Dock B while running -> B starts, A is left running (not restarted).
+        config_manager.add_server("B", command="echo")
+        result = await gateway.reconcile_servers()
+        assert set(gateway.daemon.shared_processes) == {"A", "B"}
+        assert result["started"] == ["B"]
+        assert gateway.daemon.start_shared_server.await_count == 2
+
+        # Undock A while running -> A stops live.
+        config_manager.remove_server("A")
+        result = await gateway.reconcile_servers()
+        assert set(gateway.daemon.shared_processes) == {"B"}
+        assert result["stopped"] == ["A"]
+
 
 class TestToolDiscovery:
     @pytest.mark.asyncio

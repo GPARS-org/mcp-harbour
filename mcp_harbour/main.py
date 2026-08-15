@@ -95,6 +95,7 @@ def dock(
     """
     _handle(config_manager.add_server, name, command=command, url=url)
     console.print(f"[bold green]Success:[/bold green] Server '{name}' docked successfully!")
+    _notify_daemon_reconcile()
 
 
 @app.command()
@@ -102,6 +103,43 @@ def undock(name: str):
     """Undock (remove) an MCP server."""
     _handle(config_manager.remove_server, name)
     console.print(f"[bold green]Success:[/bold green] Server '{name}' undocked.")
+    _notify_daemon_reconcile()
+
+
+def _notify_daemon_reconcile() -> None:
+    """Tell a running daemon to apply docked-server changes now (the CLI drives
+    the daemon, like `docker` drives `dockerd`). No-op with a note if it's down —
+    the change is persisted in config and applied when the daemon next starts.
+    """
+    import json
+    import urllib.request
+    from .config import DEFAULT_HOST, DEFAULT_PORT, get_or_create_control_token
+
+    if not _harbour_up(DEFAULT_HOST, DEFAULT_PORT):
+        console.print("[yellow]Daemon is not running; the change applies when it starts.[/yellow]")
+        return
+    try:
+        token = get_or_create_control_token()
+        req = urllib.request.Request(
+            f"http://{DEFAULT_HOST}:{DEFAULT_PORT}/control/reconcile",
+            method="POST",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            result = json.loads(resp.read() or b"{}")
+    except Exception as e:
+        console.print(f"[yellow]Could not reach the daemon to apply the change: {e}[/yellow]")
+        return
+
+    failed = result.get("failed") or []
+    started = result.get("started") or []
+    stopped = result.get("stopped") or []
+    if failed:
+        console.print(f"[bold red]Daemon could not start:[/bold red] {', '.join(failed)} (check the daemon log)")
+    if started:
+        console.print(f"[green]Daemon started:[/green] {', '.join(started)}")
+    if stopped:
+        console.print(f"[green]Daemon stopped:[/green] {', '.join(stopped)}")
 
 
 @app.command("list")
