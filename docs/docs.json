@@ -64,7 +64,7 @@
             "group": "Reference",
             "pages": [
               "v0.1/reference/cli",
-              "v0.1/reference/bridge",
+              "v0.1/reference/mcp-endpoint",
               "v0.1/reference/configuration",
               "v0.1/reference/policy-format"
             ]

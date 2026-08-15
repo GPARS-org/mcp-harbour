@@ -3,7 +3,7 @@ title: harbour CLI
 description: Server administration commands.
 ---
 
-The `harbour` CLI is the admin interface for managing your MCP servers, identities, and policies. It's separate from `harbour-bridge` — agents never interact with this CLI.
+The `harbour` CLI is the admin interface for managing your MCP servers, identities, and policies. Agents connect to the daemon's Streamable HTTP MCP endpoint instead of running the admin CLI.
 
 ## Server Management
 
@@ -56,11 +56,11 @@ harbour inspect filesystem
 
 ## Daemon
 
-The daemon is the long-running process that listens for agent connections, spawns MCP server processes, and enforces policies. It's registered as a system service during installation and runs automatically.
+The daemon is the long-running process that exposes the Streamable HTTP MCP endpoint, manages docked server connections, and enforces policies. It's registered during installation as a per-user background daemon that runs as you (no admin required) and starts automatically at login.
 
 ### harbour start
 
-Start the daemon via the platform service manager (systemd, launchd, or Windows Service Control Manager).
+Start the daemon via the platform's per-user service manager (systemd `--user`, a launchd agent, or a Windows logon Scheduled Task).
 
 ```bash
 harbour start
@@ -95,6 +95,34 @@ harbour serve --host 0.0.0.0 --port 5000
 |---|---|---|
 | `--host` | `127.0.0.1` | Host to bind |
 | `--port` | `4767` | Port to bind |
+
+## Version & Updates
+
+### harbour version
+
+Print the installed Harbour version.
+
+```bash
+harbour version
+```
+
+### harbour update
+
+Update Harbour in place from a GitHub release (the latest by default). It downloads the release for your platform, verifies it against the published checksums, and runs the official install script.
+
+```bash
+harbour update              # install the latest release
+harbour update --check      # report whether an update is available, without installing
+harbour update --tag v0.1.2 # install a specific release tag
+harbour update --yes        # install without the confirmation prompt
+```
+
+| Option | Description |
+|---|---|
+| `--check` | Report whether a newer version is available without installing |
+| `--tag` | Install a specific release tag instead of the latest |
+| `--force` | Reinstall even if the selected version isn't newer |
+| `--yes`, `-y` | Install without confirmation |
 
 ## Identity Management
 
