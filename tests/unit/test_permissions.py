@@ -146,18 +146,50 @@ class TestArgumentPolicy:
             )
         assert_authorization_denied(exc_info)
 
-    def test_missing_required_arg(self, engine_read_only):
-        with pytest.raises(McpError) as exc_info:
-            engine_read_only.check_permission(
-                "filesystem",
-                "read_file",
-                {"wrong_arg": "value"},
-            )
-        assert_authorization_denied(exc_info)
+    def test_policy_skipped_when_constrained_arg_absent(self, engine_read_only):
+        # The call provides no `path`, so the path policy has nothing to constrain
+        # and does not apply — the call is allowed (the tool itself validates args).
+        assert engine_read_only.check_permission(
+            "filesystem",
+            "read_file",
+            {"wrong_arg": "value"},
+        )
 
-    def test_no_args_denied_when_policy_exists(self, engine_read_only):
+    def test_policy_skipped_when_no_args(self, engine_read_only):
+        assert engine_read_only.check_permission("filesystem", "read_file")
+
+    def test_wildcard_arg_policy_allows_tools_without_that_arg(self):
+        # Regression: `--tool "*" --args "path=..."` must not reject tools that
+        # have no `path` argument.
+        policy = AgentPolicy(
+            identity_name="fs",
+            permissions={
+                "filesystem": [
+                    ToolPermission(
+                        name="*",
+                        policies=[
+                            ArgumentPolicy(
+                                arg_name="path",
+                                match_type="glob",
+                                pattern="/home/user/projects/**",
+                            )
+                        ],
+                    )
+                ]
+            },
+        )
+        engine = PermissionEngine(policy)
+
+        # A tool with no `path` argument is allowed (was wrongly denied before).
+        assert engine.check_permission("filesystem", "list_allowed_directories", {})
+        # A tool that provides `path` is still constrained.
+        assert engine.check_permission(
+            "filesystem", "read_file", {"path": "/home/user/projects/app.py"}
+        )
         with pytest.raises(McpError) as exc_info:
-            engine_read_only.check_permission("filesystem", "read_file")
+            engine.check_permission(
+                "filesystem", "read_file", {"path": "/etc/passwd"}
+            )
         assert_authorization_denied(exc_info)
 
     def test_regex_policy_allowed(self, engine_multi_policy):

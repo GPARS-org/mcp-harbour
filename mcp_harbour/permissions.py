@@ -46,10 +46,12 @@ class PermissionEngine:
         for policy in policies:
             arg_value = arguments.get(policy.arg_name)
 
+            # An argument policy constrains its argument only when the call actually
+            # provides it. A tool that doesn't take the argument is unaffected — so a
+            # broad `--tool "*" --args "path=..."` does not reject tools without a
+            # path. (You can't reach a resource through an argument you never passed.)
             if arg_value is None:
-                raise authorization_denied(
-                    f"Missing required argument '{policy.arg_name}' for policy check."
-                )
+                continue
 
             if not self._match_policy(policy, str(arg_value)):
                 raise authorization_denied(
