@@ -1,4 +1,3 @@
-import sys
 import typer
 import asyncio
 from pathlib import Path
@@ -8,14 +7,6 @@ from rich.table import Table
 from . import __version__
 from .config import ConfigManager
 from .updater import UpdateError, run_update_installer, update_binary
-
-# The Windows console defaults to cp1252, which can't encode the status glyphs or
-# box-drawing characters we print — reconfigure to UTF-8 so output never crashes.
-for _stream in (sys.stdout, sys.stderr):
-    try:
-        _stream.reconfigure(encoding="utf-8")
-    except (AttributeError, ValueError):
-        pass
 
 app = typer.Typer(help="MCP Harbour: Manage your MCP servers and permissions.")
 console = Console()
@@ -173,7 +164,7 @@ def _daemon_server_status() -> Optional[dict]:
 
 def _format_uptime(seconds: Optional[float]) -> str:
     if seconds is None:
-        return "—"
+        return "-"
     s = int(seconds)
     if s < 60:
         return f"{s}s"
@@ -188,11 +179,13 @@ def _format_uptime(seconds: Optional[float]) -> str:
 
 
 def _status_markup(state: str) -> str:
+    # ASCII-only: the output is captured/piped and decoded on other platforms
+    # (Windows cp1252), so avoid glyphs that don't round-trip through every locale.
     return {
-        "running": "[green]● running[/green]",
-        "failed": "[red]● failed[/red]",
-        "stopped": "[yellow]○ stopped[/yellow]",
-    }.get(state, "[dim]○ unknown[/dim]")
+        "running": "[green]running[/green]",
+        "failed": "[red]failed[/red]",
+        "stopped": "[yellow]stopped[/yellow]",
+    }.get(state, "[dim]unknown[/dim]")
 
 
 @app.command("list")
@@ -222,11 +215,11 @@ def list_servers():
             server.server_type.value,
             _status_markup(state),
             _format_uptime(st.get("uptime_seconds")),
-            str(n_tools) if state == "running" else "—",
+            str(n_tools) if state == "running" else "-",
         )
     console.print(table)
     if status is None:
-        console.print("[dim]Daemon not running — live status unavailable.[/dim]")
+        console.print("[dim]Daemon not running; live status unavailable.[/dim]")
 
 
 @app.command()
