@@ -156,6 +156,37 @@ class TestSharedProcesses:
         assert set(gateway.daemon.shared_processes) == {"B"}
         assert result["stopped"] == ["A"]
 
+    @pytest.mark.asyncio
+    async def test_server_status_reports_state_uptime_and_tools(self, config_manager):
+        import time as _time
+        from unittest.mock import MagicMock
+        from mcp.types import Tool
+
+        config_manager.add_server("running-srv", command="echo")
+        config_manager.add_server("stopped-srv", command="echo")
+        config_manager.add_server("failed-srv", command="bad")
+        gateway = make_gateway(config_manager)
+
+        proc = make_mock_process("running-srv", ["echo", "add"])
+        proc.session = MagicMock()
+        proc.started_at = _time.monotonic() - 5
+        proc.tools = [
+            Tool(name="echo", description="Echo it back", inputSchema={"type": "object", "properties": {}}),
+            Tool(name="add", description="Add numbers", inputSchema={"type": "object", "properties": {}}),
+        ]
+        gateway.daemon.shared_processes["running-srv"] = proc
+        gateway.daemon.server_health["running-srv"] = ServerHealth("healthy")
+        gateway.daemon.server_health["failed-srv"] = ServerHealth("failed", "boom")
+
+        status = gateway.server_status()
+
+        assert status["running-srv"]["state"] == "running"
+        assert status["running-srv"]["uptime_seconds"] >= 5
+        assert [t["name"] for t in status["running-srv"]["tools"]] == ["echo", "add"]
+        assert status["stopped-srv"]["state"] == "stopped"
+        assert status["failed-srv"]["state"] == "failed"
+        assert status["failed-srv"]["error"] == "boom"
+
 
 class TestToolDiscovery:
     @pytest.mark.asyncio

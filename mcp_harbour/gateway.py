@@ -284,6 +284,40 @@ class HarbourGateway:
         # Backward-compatible name for the reconcile primitive.
         await self.reconcile_servers()
 
+    def server_status(self) -> dict:
+        """Live per-server status for the control plane / CLI: state, uptime, error,
+        and the cached tool list. Reads in-memory daemon state — no network calls."""
+        import time
+        now = time.monotonic()
+        result = {}
+        for server in self.config_manager.list_servers():
+            proc = self.daemon.get_shared_process(server.name)
+            health = self.daemon.get_server_health(server.name)
+            if proc is not None and proc.session is not None:
+                result[server.name] = {
+                    "state": "running",
+                    "uptime_seconds": round(now - proc.started_at, 1) if proc.started_at else None,
+                    "error": None,
+                    "tools": [
+                        {"name": t.name, "description": t.description} for t in proc.tools
+                    ],
+                }
+            elif health is not None and health.state == "failed":
+                result[server.name] = {
+                    "state": "failed",
+                    "uptime_seconds": None,
+                    "error": health.error,
+                    "tools": [],
+                }
+            else:
+                result[server.name] = {
+                    "state": "stopped",
+                    "uptime_seconds": None,
+                    "error": None,
+                    "tools": [],
+                }
+        return result
+
     async def _reconcile_loop(self, interval: float = 30.0):
         """Supervisor backstop: periodically re-apply the docked config so failed
         starts are retried and any drift is corrected without a restart."""
@@ -345,6 +379,18 @@ class HarbourGateway:
             self.config_manager.reload()
             return JSONResponse(await self.reconcile_servers())
 
+        async def control_servers(request):
+            # Control plane: live per-server status (state, uptime, tools) for the CLI.
+            token = self._extract_bearer_token(request.headers.get("authorization"))
+            if not self._check_control_token(token):
+                return JSONResponse(
+                    {"error": "Unauthorized"},
+                    status_code=HTTPStatus.UNAUTHORIZED,
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+            self.config_manager.reload()
+            return JSONResponse(self.server_status())
+
         @asynccontextmanager
         async def lifespan(app):
             async with manager.run():
@@ -354,6 +400,7 @@ class HarbourGateway:
             routes=[
                 Route("/healthz", endpoint=health, methods=["GET"]),
                 Route("/control/reconcile", endpoint=control_reconcile, methods=["POST"]),
+                Route("/control/servers", endpoint=control_servers, methods=["GET"]),
                 Route("/mcp", endpoint=http_app, methods=["GET", "POST", "DELETE"]),
             ],
             lifespan=lifespan,

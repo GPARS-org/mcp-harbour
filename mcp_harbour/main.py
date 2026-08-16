@@ -142,26 +142,87 @@ def _notify_daemon_reconcile() -> None:
         console.print(f"[green]Daemon stopped:[/green] {', '.join(stopped)}")
 
 
+def _daemon_server_status() -> Optional[dict]:
+    """Fetch live per-server status from the running daemon, or None if it's down."""
+    import json
+    import urllib.request
+    from .config import DEFAULT_HOST, DEFAULT_PORT, get_or_create_control_token
+
+    if not _harbour_up(DEFAULT_HOST, DEFAULT_PORT):
+        return None
+    try:
+        token = get_or_create_control_token()
+        req = urllib.request.Request(
+            f"http://{DEFAULT_HOST}:{DEFAULT_PORT}/control/servers",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            return json.loads(resp.read() or b"{}")
+    except Exception:
+        return None
+
+
+def _format_uptime(seconds: Optional[float]) -> str:
+    if seconds is None:
+        return "—"
+    s = int(seconds)
+    if s < 60:
+        return f"{s}s"
+    m, s = divmod(s, 60)
+    if m < 60:
+        return f"{m}m {s}s"
+    h, m = divmod(m, 60)
+    if h < 24:
+        return f"{h}h {m}m"
+    d, h = divmod(h, 24)
+    return f"{d}d {h}h"
+
+
+def _status_markup(state: str) -> str:
+    return {
+        "running": "[green]● running[/green]",
+        "failed": "[red]● failed[/red]",
+        "stopped": "[yellow]○ stopped[/yellow]",
+    }.get(state, "[dim]○ unknown[/dim]")
+
+
 @app.command("list")
 def list_servers():
-    """List all docked MCP servers."""
+    """List all docked MCP servers with their live status."""
     servers = config_manager.list_servers()
     if not servers:
         console.print("No servers docked.")
         return
 
+    status = _daemon_server_status()
+
     table = Table(title="Docked Ships (MCP Servers)")
     table.add_column("Name", style="cyan")
     table.add_column("Command", style="magenta")
     table.add_column("Type", style="green")
+    table.add_column("Status")
+    table.add_column("Uptime", style="dim")
+    table.add_column("Tools", justify="right")
     for server in servers:
-        table.add_row(server.name, server.command or server.url, server.server_type.value)
+        st = (status or {}).get(server.name, {})
+        state = st.get("state", "unknown" if status is None else "stopped")
+        n_tools = len(st.get("tools", [])) if st else 0
+        table.add_row(
+            server.name,
+            server.command or server.url,
+            server.server_type.value,
+            _status_markup(state),
+            _format_uptime(st.get("uptime_seconds")),
+            str(n_tools) if state == "running" else "—",
+        )
     console.print(table)
+    if status is None:
+        console.print("[dim]Daemon not running — live status unavailable.[/dim]")
 
 
 @app.command()
 def inspect(name: str):
-    """Inspect details of a docked server."""
+    """Inspect a docked server: its config, live status, and the tools it provides."""
     server = config_manager.get_server(name)
     if not server:
         console.print(f"[bold red]Error:[/bold red] Server '{name}' not found.")
@@ -173,7 +234,35 @@ def inspect(name: str):
     if server.url:
         console.print(f"[bold]URL:[/bold] {server.url}")
     console.print(f"[bold]Env:[/bold] {server.env}")
-    console.print(f"[bold]Type:[/bold] {server.server_type}")
+    console.print(f"[bold]Type:[/bold] {server.server_type.value}")
+
+    status = _daemon_server_status()
+    if status is None:
+        console.print("[bold]Status:[/bold] [dim]daemon not running[/dim]")
+        return
+
+    st = status.get(name)
+    if st is None:
+        console.print("[bold]Status:[/bold] [dim]unknown[/dim]")
+        return
+
+    console.print(f"[bold]Status:[/bold] {_status_markup(st['state'])}")
+    if st.get("uptime_seconds") is not None:
+        console.print(f"[bold]Uptime:[/bold] {_format_uptime(st['uptime_seconds'])}")
+    if st.get("error"):
+        console.print(f"[bold red]Error:[/bold red] {st['error']}")
+
+    tools = st.get("tools") or []
+    if tools:
+        tools_table = Table(title=f"Tools ({len(tools)})")
+        tools_table.add_column("Tool", style="cyan")
+        tools_table.add_column("Description", style="white")
+        for tool in tools:
+            desc = (tool.get("description") or "").strip().split("\n")[0]
+            tools_table.add_row(tool["name"], desc)
+        console.print(tools_table)
+    elif st["state"] == "running":
+        console.print("[dim]This server exposes no tools.[/dim]")
 
 
 @app.command()

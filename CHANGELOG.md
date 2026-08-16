@@ -10,6 +10,12 @@ tagging it.
 
 ## [Unreleased]
 
+### Added
+- `harbour list` now shows each server's live **status**, **uptime**, and **tool
+  count**; `harbour inspect` shows status, uptime, and the **tools the server
+  provides** (name + description). Live data is read from the running daemon over
+  the control plane; when the daemon is down the CLI says so.
+
 ### Fixed
 - Docking or undocking a server while the daemon is running now takes effect
   immediately, instead of requiring a daemon restart before the server's tools

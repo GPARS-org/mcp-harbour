@@ -1,7 +1,8 @@
 import os
 import logging
+import time
 from dataclasses import dataclass
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 import anyio
 from mcp import ClientSession, StdioServerParameters
@@ -25,6 +26,8 @@ class ServerProcess:
         self.session: Optional[ClientSession] = None
         self.exit_stack = AsyncExitStack()
         self._session_lock = anyio.Lock()
+        self.tools: List = []               # cached tool list from the last start
+        self.started_at: Optional[float] = None  # time.monotonic() when it went live
 
     async def start(self):
         logger.info(f"Starting server {self.server_config.name}...")
@@ -38,6 +41,8 @@ class ServerProcess:
             logger.info(f"Connected to {self.server_config.name}. Initialized session.")
 
             tools = await self.session.list_tools()
+            self.tools = tools.tools
+            self.started_at = time.monotonic()
             logger.info(
                 f"Server {self.server_config.name} provides {len(tools.tools)} tools."
             )
