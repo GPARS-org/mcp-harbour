@@ -68,7 +68,10 @@ if ($HarbourBinaryPath) {
     $checksumUrl = "https://github.com/$Repo/releases/download/$tag/checksums.txt"
     $checksums = $null
     try {
-        $checksums = (Invoke-WebRequest -Uri $checksumUrl -UseBasicParsing).Content
+        # For an octet-stream response, .Content is a byte[]; decode to text so the
+        # per-asset lines parse (otherwise every lookup reports "no entry").
+        $raw = (Invoke-WebRequest -Uri $checksumUrl -UseBasicParsing).Content
+        $checksums = if ($raw -is [byte[]]) { [System.Text.Encoding]::UTF8.GetString($raw) } else { $raw }
     } catch {
         Warn "checksums.txt not available for $tag; skipping verification"
     }

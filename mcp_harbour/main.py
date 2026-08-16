@@ -1,3 +1,4 @@
+import sys
 import typer
 import asyncio
 from pathlib import Path
@@ -7,6 +8,14 @@ from rich.table import Table
 from . import __version__
 from .config import ConfigManager
 from .updater import UpdateError, run_update_installer, update_binary
+
+# The Windows console defaults to cp1252, which can't encode the status glyphs or
+# box-drawing characters we print — reconfigure to UTF-8 so output never crashes.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8")
+    except (AttributeError, ValueError):
+        pass
 
 app = typer.Typer(help="MCP Harbour: Manage your MCP servers and permissions.")
 console = Console()

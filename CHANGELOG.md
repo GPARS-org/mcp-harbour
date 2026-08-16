@@ -17,6 +17,9 @@ tagging it.
   the control plane; when the daemon is down the CLI says so.
 
 ### Fixed
+- Windows install/update verified release checksums incorrectly: the downloaded
+  `checksums.txt` was read as raw bytes, so every asset lookup reported "no entry"
+  and aborted. It now decodes the response to text before parsing.
 - Docking or undocking a server while the daemon is running now takes effect
   immediately, instead of requiring a daemon restart before the server's tools
   appear. The daemon owns server lifecycle: `harbour dock`/`undock` notify it
