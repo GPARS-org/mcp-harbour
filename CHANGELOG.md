@@ -10,6 +10,8 @@ tagging it.
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-08-17
+
 ### Added
 - `harbour list` now shows each server's live **status**, **uptime**, and **tool
   count**; `harbour inspect` shows status, uptime, and the **tools the server
