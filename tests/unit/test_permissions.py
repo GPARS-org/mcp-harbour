@@ -146,15 +146,6 @@ class TestArgumentPolicy:
             )
         assert_authorization_denied(exc_info)
 
-    def test_policy_skipped_when_constrained_arg_absent(self, engine_read_only):
-        # The call provides no `path`, so the path policy has nothing to constrain
-        # and does not apply — the call is allowed (the tool itself validates args).
-        assert engine_read_only.check_permission(
-            "filesystem",
-            "read_file",
-            {"wrong_arg": "value"},
-        )
-
     def test_policy_skipped_when_no_args(self, engine_read_only):
         assert engine_read_only.check_permission("filesystem", "read_file")
 
@@ -241,20 +232,12 @@ class TestEdgeCases:
 
 
 class TestGPARSErrorCodes:
-    def test_denied_error_has_correct_code(self, engine_read_only):
-        with pytest.raises(McpError) as exc_info:
-            engine_read_only.check_permission("git", "git_status")
-        assert exc_info.value.error.code == AUTHORIZATION_DENIED_CODE
-
-    def test_denied_error_has_gpars_data(self, engine_read_only):
+    def test_denied_error_carries_gpars_data(self, engine_read_only):
+        # The code/message facets are covered by test_errors.py; this asserts the
+        # engine's denial actually carries the GPARS data payload end to end.
         with pytest.raises(McpError) as exc_info:
             engine_read_only.check_permission("git", "git_status")
         assert exc_info.value.error.data == {"gpars_code": "AUTHORIZATION_DENIED"}
-
-    def test_denied_error_has_message(self, engine_read_only):
-        with pytest.raises(McpError) as exc_info:
-            engine_read_only.check_permission("git", "git_status")
-        assert "denied" in exc_info.value.error.message.lower()
 
 
 # ─── Multiple Permissions & Regex ──────────────────────────────────

@@ -66,13 +66,10 @@ class TestArgumentPolicy:
         p = ArgumentPolicy(arg_name="path", pattern="/tmp/**")
         assert p.match_type == "glob"
 
-    def test_invalid_match_type_raises(self):
+    @pytest.mark.parametrize("bad", ["exact", "fuzzy", "GLOB", ""])
+    def test_invalid_match_type_raises(self, bad):
         with pytest.raises(ValidationError):
-            ArgumentPolicy(arg_name="x", match_type="exact", pattern="*")
-
-    def test_fuzzy_match_type_raises(self):
-        with pytest.raises(ValidationError):
-            ArgumentPolicy(arg_name="x", match_type="fuzzy", pattern="*")
+            ArgumentPolicy(arg_name="x", match_type=bad, pattern="*")
 
 
 class TestToolPermission:

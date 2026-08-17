@@ -168,6 +168,7 @@ class TestE2EAuthentication:
 
             assert client.session_id()
             assert result.serverInfo.name == "mcp-harbour"
+            assert result.capabilities.tools is not None
         finally:
             await client.close()
 
@@ -190,23 +191,6 @@ class TestE2EAuthentication:
             )
 
         assert response.status_code == 401
-
-
-# ─── Initialize Tests ───────────────────────────────────────────────
-
-
-class TestE2EInitialize:
-    @pytest.mark.asyncio
-    async def test_initialize_returns_capabilities(self, e2e_daemon):
-        client = MCPHTTPClient("127.0.0.1", e2e_daemon["port"])
-        try:
-            await client.connect(e2e_daemon["tokens"]["full-access"])
-            result = await client.initialize()
-
-            assert result.serverInfo.name == "mcp-harbour"
-            assert result.capabilities.tools is not None
-        finally:
-            await client.close()
 
 
 # ─── List Tools Tests ───────────────────────────────────────────────
