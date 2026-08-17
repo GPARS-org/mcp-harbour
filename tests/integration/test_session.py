@@ -187,6 +187,37 @@ class TestSharedProcesses:
         assert status["failed-srv"]["state"] == "failed"
         assert status["failed-srv"]["error"] == "boom"
 
+    @pytest.mark.asyncio
+    async def test_unhealthy_server_is_dropped_for_restart(self, config_manager):
+        from unittest.mock import MagicMock
+
+        config_manager.add_server("healthy", command="echo")
+        config_manager.add_server("broken", command="echo")
+        gateway = make_gateway(config_manager)
+
+        healthy = make_mock_process("healthy", ["t"])
+        healthy.session = MagicMock()  # list_tools succeeds (mock default)
+        broken = make_mock_process("broken", ["t"])
+        broken.session = MagicMock()
+        broken.list_tools = AsyncMock(side_effect=RuntimeError("broken pipe"))
+        gateway.daemon.shared_processes["healthy"] = healthy
+        gateway.daemon.shared_processes["broken"] = broken
+
+        stopped = []
+
+        async def stop_side_effect(name):
+            gateway.daemon.shared_processes.pop(name, None)
+            stopped.append(name)
+
+        gateway.daemon.stop_shared_server = AsyncMock(side_effect=stop_side_effect)
+
+        await gateway._restart_unhealthy_servers()
+
+        # Only the server that failed its probe is dropped; the healthy one stays.
+        assert stopped == ["broken"]
+        assert "healthy" in gateway.daemon.shared_processes
+        assert "broken" not in gateway.daemon.shared_processes
+
 
 class TestToolDiscovery:
     @pytest.mark.asyncio

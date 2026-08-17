@@ -344,6 +344,7 @@ class HarbourGateway:
         """Best-effort liveness: probe each running server; if its session has
         broken (the child likely died), drop it so reconcile restarts it. A timeout
         is treated as 'busy but alive' so a merely-slow server is not restarted."""
+        dead = []
         for name, proc in list(self.daemon.shared_processes.items()):
             if proc.session is None:
                 continue
@@ -352,11 +353,18 @@ class HarbourGateway:
             except asyncio.TimeoutError:
                 continue  # slow but alive
             except Exception as e:
-                logger.warning(f"Server '{name}' failed its health check; restarting: {e}")
-                try:
-                    await self.daemon.stop_shared_server(name)
-                except Exception:
-                    pass
+                logger.warning(f"Server '{name}' failed its health check; will restart: {e}")
+                dead.append(name)
+        # Stop under the reconcile lock so this never races a concurrent
+        # control-plane reconcile mutating the same shared-process table.
+        if dead:
+            async with self._reconcile_lock:
+                for name in dead:
+                    try:
+                        await self.daemon.stop_shared_server(name)
+                    except Exception as e:
+                        logger.error(f"Failed to stop unhealthy server '{name}': {e}")
+        # reconcile_servers (next in the supervisor loop) restarts them.
 
     def _check_control_token(self, token: Optional[str]) -> bool:
         if not token:
