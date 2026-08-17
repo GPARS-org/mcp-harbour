@@ -19,7 +19,7 @@ When an agent calls a tool, the harbour checks three things in order:
     Does any tool permission in the policy match the requested tool name? If not → `AUTHORIZATION_DENIED`.
   </Step>
   <Step title="Argument check">
-    If argument policies are defined and arguments are provided, do all policies pass? If any fail → `AUTHORIZATION_DENIED`.
+    Each argument policy is checked only when the call actually includes that argument — a tool that doesn't take the argument is unaffected. If a provided argument fails its policy → `AUTHORIZATION_DENIED`. So `--tool "*" --args "path=..."` constrains the `path` argument wherever it appears, without rejecting tools that have no `path`.
   </Step>
 </Steps>
 
