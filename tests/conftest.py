@@ -2,6 +2,9 @@ import asyncio
 import os
 import pytest
 from collections import OrderedDict
+
+# Never let the CLI's "update available" check hit the network during tests.
+os.environ.setdefault("MCP_HARBOUR_NO_UPDATE_CHECK", "1")
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 

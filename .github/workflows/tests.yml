@@ -19,6 +19,9 @@ env:
   # The frozen binary bundles keyrings.alt; select the file backend so identity
   # creation/verification works headless on every OS.
   PYTHON_KEYRING_BACKEND: keyrings.alt.file.PlaintextKeyring
+  # The CLI's update-available check would call the GitHub API on every command;
+  # disable it in CI (shared-runner IPs get rate-limited, and it adds latency).
+  MCP_HARBOUR_NO_UPDATE_CHECK: "1"
 
 jobs:
   actionlint:

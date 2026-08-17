@@ -114,6 +114,20 @@ def _fetch_release(tag: Optional[str]) -> dict:
     return release
 
 
+def fetch_latest_tag(timeout: float = 3.0) -> str:
+    """Lightweight fetch of the latest release tag, for the update-available hint.
+    Short timeout, no asset validation. Raises on network error."""
+    request = urllib.request.Request(
+        f"{GITHUB_API}/releases/latest", headers={"User-Agent": "mcp-harbour"}
+    )
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        data = json.loads(response.read().decode("utf-8"))
+    tag = data.get("tag_name")
+    if not tag:
+        raise UpdateError("Latest release has no tag_name.")
+    return tag
+
+
 def fetch_release_info(
     current_version: str = __version__,
     tag: Optional[str] = None,

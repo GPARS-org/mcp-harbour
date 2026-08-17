@@ -15,6 +15,9 @@ tagging it.
   count**; `harbour inspect` shows status, uptime, and the **tools the server
   provides** (name + description). Live data is read from the running daemon over
   the control plane; when the daemon is down the CLI says so.
+- The CLI prints a hint when a **newer release is available**. The check runs at
+  most once a day (cached), never blocks or fails the command, and can be turned
+  off with `MCP_HARBOUR_NO_UPDATE_CHECK=1`.
 
 ### Fixed
 - An argument policy no longer rejects tools that don't take the constrained

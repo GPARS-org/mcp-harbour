@@ -110,3 +110,82 @@ def test_update_handles_installer_failure():
 
     assert result.exit_code == 1
     assert "installer exploded" in result.output
+
+
+# ─── Update-available hint ──────────────────────────────────────────
+
+
+def test_update_hint_shown_when_newer_available(tmp_path, monkeypatch):
+    import mcp_harbour.main as m
+    from mcp_harbour import __version__, config
+    from unittest.mock import MagicMock
+
+    monkeypatch.delenv("MCP_HARBOUR_NO_UPDATE_CHECK", raising=False)
+    monkeypatch.setattr(config, "CONFIG_DIR", tmp_path)
+    monkeypatch.setattr("mcp_harbour.updater.fetch_latest_tag", lambda timeout=2.0: "v9.9.9")
+    mock_console = MagicMock()
+    monkeypatch.setattr(m, "err_console", mock_console)
+
+    m._maybe_notify_update()
+
+    assert mock_console.print.called
+    assert "9.9.9" in mock_console.print.call_args[0][0]
+    assert __version__ in mock_console.print.call_args[0][0]
+
+
+def test_no_hint_when_up_to_date(tmp_path, monkeypatch):
+    import mcp_harbour.main as m
+    from mcp_harbour import __version__, config
+    from unittest.mock import MagicMock
+
+    monkeypatch.delenv("MCP_HARBOUR_NO_UPDATE_CHECK", raising=False)
+    monkeypatch.setattr(config, "CONFIG_DIR", tmp_path)
+    monkeypatch.setattr("mcp_harbour.updater.fetch_latest_tag", lambda timeout=2.0: f"v{__version__}")
+    mock_console = MagicMock()
+    monkeypatch.setattr(m, "err_console", mock_console)
+
+    m._maybe_notify_update()
+
+    assert not mock_console.print.called
+
+
+def test_update_check_is_throttled(tmp_path, monkeypatch):
+    import json
+    import time
+    import mcp_harbour.main as m
+    from mcp_harbour import __version__, config
+    from unittest.mock import MagicMock
+
+    monkeypatch.delenv("MCP_HARBOUR_NO_UPDATE_CHECK", raising=False)
+    monkeypatch.setattr(config, "CONFIG_DIR", tmp_path)
+    (tmp_path / "update-check.json").write_text(
+        json.dumps({"checked_at": time.time(), "latest": __version__})
+    )
+
+    def _boom(timeout=2.0):
+        raise AssertionError("network check must not run within the interval")
+
+    monkeypatch.setattr("mcp_harbour.updater.fetch_latest_tag", _boom)
+    monkeypatch.setattr(m, "err_console", MagicMock())
+
+    m._maybe_notify_update()  # reads the fresh cache; no network call
+
+
+def test_update_check_disabled_by_env(tmp_path, monkeypatch):
+    import mcp_harbour.main as m
+    from mcp_harbour import config
+    from unittest.mock import MagicMock
+
+    monkeypatch.setenv("MCP_HARBOUR_NO_UPDATE_CHECK", "1")
+    monkeypatch.setattr(config, "CONFIG_DIR", tmp_path)
+
+    def _boom(timeout=2.0):
+        raise AssertionError("check must not run when disabled")
+
+    monkeypatch.setattr("mcp_harbour.updater.fetch_latest_tag", _boom)
+    mock_console = MagicMock()
+    monkeypatch.setattr(m, "err_console", mock_console)
+
+    m._maybe_notify_update()
+
+    assert not mock_console.print.called

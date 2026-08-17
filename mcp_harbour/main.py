@@ -10,7 +10,67 @@ from .updater import UpdateError, run_update_installer, update_binary
 
 app = typer.Typer(help="MCP Harbour: Manage your MCP servers and permissions.")
 console = Console()
+err_console = Console(stderr=True)
 config_manager = ConfigManager()
+
+# How often the "update available" check refreshes over the network.
+_UPDATE_CHECK_INTERVAL = 86400  # 24h
+
+
+@app.callback()
+def _root(ctx: typer.Context):
+    """Register a best-effort 'update available' hint after interactive commands."""
+    if ctx.resilient_parsing:  # shell completion
+        return
+    if ctx.invoked_subcommand in (None, "update", "version", "serve"):
+        return
+    ctx.call_on_close(_maybe_notify_update)
+
+
+def _update_cache_path():
+    from . import config
+    return config.CONFIG_DIR / "update-check.json"
+
+
+def _maybe_notify_update() -> None:
+    """Print a hint if a newer release is available. The network check is throttled
+    to once per interval with a short timeout; the rest of the time it reads a small
+    cache. Best-effort — it never blocks meaningfully or fails the command."""
+    import json
+    import os
+    import time
+    from .updater import fetch_latest_tag, is_newer
+
+    if os.environ.get("MCP_HARBOUR_NO_UPDATE_CHECK"):
+        return
+
+    path = _update_cache_path()
+    try:
+        cache = json.loads(path.read_text())
+    except Exception:
+        cache = {}
+
+    now = time.time()
+    latest = cache.get("latest")
+    if now - cache.get("checked_at", 0) > _UPDATE_CHECK_INTERVAL:
+        # Refresh once per interval; on failure, back off for the full interval.
+        try:
+            latest = fetch_latest_tag(timeout=2.0).lstrip("v")
+        except Exception:
+            latest = cache.get("latest")
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = path.with_suffix(".tmp")
+            tmp.write_text(json.dumps({"checked_at": now, "latest": latest}))
+            tmp.replace(path)
+        except Exception:
+            pass
+
+    if latest and is_newer(latest, __version__):
+        err_console.print(
+            f"[yellow]A new release of Harbour is available:[/yellow] "
+            f"{__version__} -> {latest}. Run [bold]harbour update[/bold]."
+        )
 
 # Sub-typer for identity management
 identity_app = typer.Typer()
