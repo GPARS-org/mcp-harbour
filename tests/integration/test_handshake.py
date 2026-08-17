@@ -128,6 +128,17 @@ class TestControlPlane:
         # Docked but not started in this gateway → reported as stopped.
         assert resp.json()["srv"]["state"] == "stopped"
 
+    def test_control_token_isolated_from_identity_keyring(self, config_manager):
+        from mcp_harbour.config import get_or_create_control_token
+
+        token = get_or_create_control_token()
+        assert token.startswith("harbour_ctl_")
+        # An identity whose name would collide with the old control account must
+        # not corrupt the control token (it lives in a separate keyring service).
+        config_manager.add_identity("__control__")
+        config_manager.add_identity("token")
+        assert get_or_create_control_token() == token
+
 
 class TestHTTPAuthentication:
     @pytest.mark.asyncio

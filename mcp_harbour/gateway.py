@@ -3,6 +3,7 @@ import hashlib
 import hmac
 import logging
 import socket
+import time
 from collections import OrderedDict
 from contextlib import asynccontextmanager
 from fnmatch import fnmatch
@@ -255,17 +256,27 @@ class HarbourGateway:
             desired = {s.name: s for s in self.config_manager.list_servers()}
             started, stopped, failed = [], [], []
 
+            async def _stop(name: str) -> bool:
+                try:
+                    await self.daemon.stop_shared_server(name)
+                    return True
+                except Exception as e:
+                    logger.error(f"Failed to stop server '{name}': {e}")
+                    return False
+
             for name in list(self.daemon.shared_processes.keys()):
                 if name not in desired:
-                    await self.daemon.stop_shared_server(name)
-                    stopped.append(name)
+                    if await _stop(name):
+                        stopped.append(name)
+                    else:
+                        failed.append(name)
 
             for name, server in desired.items():
                 proc = self.daemon.get_shared_process(name)
                 if proc is not None and proc.session is not None and proc.server_config == server:
                     continue  # already running with the current spec
                 if proc is not None:
-                    await self.daemon.stop_shared_server(name)  # changed or dead -> restart
+                    await _stop(name)  # changed or dead -> restart
                 try:
                     await self.daemon.start_shared_server(server)
                     started.append(name)
@@ -287,7 +298,6 @@ class HarbourGateway:
     def server_status(self) -> dict:
         """Live per-server status for the control plane / CLI: state, uptime, error,
         and the cached tool list. Reads in-memory daemon state — no network calls."""
-        import time
         now = time.monotonic()
         result = {}
         for server in self.config_manager.list_servers():
@@ -319,15 +329,34 @@ class HarbourGateway:
         return result
 
     async def _reconcile_loop(self, interval: float = 30.0):
-        """Supervisor backstop: periodically re-apply the docked config so failed
-        starts are retried and any drift is corrected without a restart."""
+        """Supervisor backstop: periodically restart servers whose session died,
+        retry failed starts, and correct any drift — all without a daemon restart."""
         while True:
             await asyncio.sleep(interval)
             try:
+                await self._restart_unhealthy_servers()
                 self.config_manager.reload()
                 await self.reconcile_servers()
             except Exception as e:
                 logger.error(f"Periodic reconcile failed: {e}")
+
+    async def _restart_unhealthy_servers(self):
+        """Best-effort liveness: probe each running server; if its session has
+        broken (the child likely died), drop it so reconcile restarts it. A timeout
+        is treated as 'busy but alive' so a merely-slow server is not restarted."""
+        for name, proc in list(self.daemon.shared_processes.items()):
+            if proc.session is None:
+                continue
+            try:
+                await asyncio.wait_for(proc.list_tools(), timeout=10)
+            except asyncio.TimeoutError:
+                continue  # slow but alive
+            except Exception as e:
+                logger.warning(f"Server '{name}' failed its health check; restarting: {e}")
+                try:
+                    await self.daemon.stop_shared_server(name)
+                except Exception:
+                    pass
 
     def _check_control_token(self, token: Optional[str]) -> bool:
         if not token:
@@ -338,6 +367,18 @@ class HarbourGateway:
             logger.error(f"Could not read control token: {e}")
             return False
         return hmac.compare_digest(token, expected)
+
+    def _control_unauthorized(self, request):
+        """Return a 401 JSONResponse if the request lacks a valid control token,
+        else None. Shared by every /control/* endpoint."""
+        token = self._extract_bearer_token(request.headers.get("authorization"))
+        if self._check_control_token(token):
+            return None
+        return JSONResponse(
+            {"error": "Unauthorized"},
+            status_code=HTTPStatus.UNAUTHORIZED,
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
     def _security_settings(self, host: str, port: int) -> TransportSecuritySettings:
         allowed_hosts = [
@@ -367,27 +408,19 @@ class HarbourGateway:
 
         async def control_reconcile(request):
             # Control plane: the CLI (dock/undock) calls this so the daemon applies
-            # lifecycle changes immediately. Authenticated with the control token —
+            # lifecycle changes immediately. The control token authenticates it —
             # agent tokens never match, so they cannot drive lifecycle.
-            token = self._extract_bearer_token(request.headers.get("authorization"))
-            if not self._check_control_token(token):
-                return JSONResponse(
-                    {"error": "Unauthorized"},
-                    status_code=HTTPStatus.UNAUTHORIZED,
-                    headers={"WWW-Authenticate": "Bearer"},
-                )
+            denied = self._control_unauthorized(request)
+            if denied is not None:
+                return denied
             self.config_manager.reload()
             return JSONResponse(await self.reconcile_servers())
 
         async def control_servers(request):
             # Control plane: live per-server status (state, uptime, tools) for the CLI.
-            token = self._extract_bearer_token(request.headers.get("authorization"))
-            if not self._check_control_token(token):
-                return JSONResponse(
-                    {"error": "Unauthorized"},
-                    status_code=HTTPStatus.UNAUTHORIZED,
-                    headers={"WWW-Authenticate": "Bearer"},
-                )
+            denied = self._control_unauthorized(request)
+            if denied is not None:
+                return denied
             self.config_manager.reload()
             return JSONResponse(self.server_status())
 
@@ -410,6 +443,12 @@ class HarbourGateway:
         """Run the gateway over Streamable HTTP."""
         self.config_manager.reload()
         await self.reconcile_servers()
+        # Create the control token now so it exists before the CLI's first call
+        # (avoids a first-use race where each side would mint a different token).
+        try:
+            get_or_create_control_token()
+        except Exception as e:
+            logger.error(f"Could not initialize control token: {e}")
 
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
             try:

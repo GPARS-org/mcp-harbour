@@ -30,8 +30,11 @@ POLICIES_DIR = CONFIG_DIR / "policies"
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 4767
 
-# Reserved keyring account for the loopback control-plane token (see below).
-CONTROL_ACCOUNT = "__control__"
+# The control token lives under its OWN keyring service, separate from the
+# "mcp-harbour" service used for identity keys, so no identity name can ever
+# collide with it.
+CONTROL_SERVICE = "mcp-harbour-control"
+CONTROL_ACCOUNT = "token"
 
 
 def get_or_create_control_token() -> str:
@@ -41,12 +44,12 @@ def get_or_create_control_token() -> str:
     running as the same user — can read it and present it to the daemon. The
     control channel is loopback-only, so both ends share the user's keyring.
     """
-    token = keyring.get_password("mcp-harbour", CONTROL_ACCOUNT)
+    token = keyring.get_password(CONTROL_SERVICE, CONTROL_ACCOUNT)
     if not token:
         token = "harbour_ctl_" + "".join(
             secrets.choice(string.ascii_letters + string.digits) for _ in range(32)
         )
-        keyring.set_password("mcp-harbour", CONTROL_ACCOUNT, token)
+        keyring.set_password(CONTROL_SERVICE, CONTROL_ACCOUNT, token)
     return token
 
 
