@@ -173,3 +173,74 @@ class TestConfigPlatformDir:
         path = _get_config_dir()
         assert "mcp-harbour" in str(path)
         assert "appdata" in str(path).lower()
+
+
+# ─── coverage: config-dir override, control token, error paths ──────
+
+import keyring.errors as _kerr
+from unittest.mock import MagicMock as _MM
+
+import pytest as _pytest
+
+from mcp_harbour import config as _cfg
+
+
+def test_get_config_dir_override(monkeypatch, tmp_path):
+    monkeypatch.setenv("MCP_HARBOUR_CONFIG_DIR", str(tmp_path))
+    assert _cfg._get_config_dir() == tmp_path
+
+
+def test_get_or_create_control_token_creates_then_reuses(monkeypatch):
+    store = {}
+    monkeypatch.setattr(_cfg.keyring, "get_password", lambda svc, acc: store.get((svc, acc)))
+    monkeypatch.setattr(_cfg.keyring, "set_password",
+                        lambda svc, acc, v: store.__setitem__((svc, acc), v))
+    t1 = _cfg.get_or_create_control_token()
+    assert t1.startswith("harbour_ctl_")
+    assert _cfg.get_or_create_control_token() == t1  # reused, not regenerated
+
+
+def test_load_config_corrupt_returns_empty(config_manager):
+    _cfg.CONFIG_FILE.write_text("{ not valid json")
+    config_manager.reload()
+    assert config_manager.config.servers == {}
+
+
+def test_remove_identity_swallows_missing_keyring_entry(config_manager, monkeypatch):
+    config_manager.add_identity("agent")
+    monkeypatch.setattr(_cfg.keyring, "delete_password",
+                        _MM(side_effect=_kerr.PasswordDeleteError("gone")))
+    config_manager.remove_identity("agent")
+    assert "agent" not in config_manager.config.identities
+
+
+def test_remove_identity_logs_keyring_error_but_removes(config_manager, monkeypatch):
+    config_manager.add_identity("agent")
+    monkeypatch.setattr(_cfg.keyring, "delete_password", _MM(side_effect=RuntimeError("boom")))
+    config_manager.remove_identity("agent")
+    assert "agent" not in config_manager.config.identities
+
+
+def test_remove_identity_swallows_policy_unlink_error(config_manager, monkeypatch):
+    config_manager.add_identity("agent")
+    config_manager.grant_permission("agent", "srv", tool="*")  # writes a policy file
+    monkeypatch.setattr("pathlib.Path.unlink", _MM(side_effect=OSError("locked")))
+    config_manager.remove_identity("agent")
+    assert "agent" not in config_manager.config.identities
+
+
+def test_remove_identity_not_found_raises(config_manager):
+    with _pytest.raises(ValueError):
+        config_manager.remove_identity("ghost")
+
+
+def test_list_identities(config_manager):
+    config_manager.add_identity("a")
+    config_manager.add_identity("b")
+    names = {i.name for i in config_manager.list_identities()}
+    assert names == {"a", "b"}
+
+
+def test_load_policy_corrupt_returns_none(config_manager):
+    (_cfg.POLICIES_DIR / "agent.json").write_text("{ bad json")
+    assert config_manager.load_policy("agent") is None

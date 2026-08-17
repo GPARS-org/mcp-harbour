@@ -249,3 +249,111 @@ def test_run_installer_translates_subprocess_failure(tmp_path):
     ):
         with pytest.raises(UpdateError, match="Installer exited with status 7"):
             run_installer(installer_path, system="Linux")
+
+
+# ─── coverage: error paths, platform branches, network primitives ───
+
+import urllib.error as _urlerr
+from unittest.mock import MagicMock as _MM
+
+import pytest as _pytest
+
+from mcp_harbour import updater as _u
+from mcp_harbour import __version__ as _VER
+
+
+def _cm(read_bytes):
+    resp = _MM()
+    resp.read.return_value = read_bytes
+    cm = _MM()
+    cm.__enter__ = lambda s: resp
+    cm.__exit__ = lambda s, *a: False
+    return cm
+
+
+def test_version_tuple_handles_prerelease_suffix():
+    assert _u._version_tuple("0.1.2rc1") == (0, 1, 2)
+    assert _u.is_newer("0.2.0beta", "0.1.5") is True
+
+
+def test_installer_asset_name_unsupported():
+    with _pytest.raises(_u.UpdateError):
+        _u.installer_asset_name(system="Plan9")
+
+
+def test_github_json_parses_response(monkeypatch):
+    monkeypatch.setattr("urllib.request.urlopen", lambda *a, **k: _cm(b'{"tag_name":"v1.2.3"}'))
+    assert _u._github_json("http://x")["tag_name"] == "v1.2.3"
+
+
+def test_download_writes_destination(tmp_path, monkeypatch):
+    monkeypatch.setattr("urllib.request.urlopen", lambda *a, **k: _cm(b""))
+    monkeypatch.setattr("shutil.copyfileobj", lambda *a, **k: None)
+    dest = tmp_path / "f.bin"
+    _u._download("http://x", dest)
+    assert dest.exists()
+
+
+def test_download_text_decodes(monkeypatch):
+    monkeypatch.setattr("urllib.request.urlopen", lambda *a, **k: _cm(b"hello"))
+    assert _u.download_text("http://x") == "hello"
+
+
+def test_fetch_release_missing_tag(monkeypatch):
+    monkeypatch.setattr(_u, "_github_json", lambda url: {})
+    with _pytest.raises(_u.UpdateError, match="did not include a tag"):
+        _u._fetch_release(None)
+
+
+def test_fetch_latest_tag_missing(monkeypatch):
+    monkeypatch.setattr("urllib.request.urlopen", lambda *a, **k: _cm(b"{}"))
+    with _pytest.raises(_u.UpdateError, match="no tag_name"):
+        _u.fetch_latest_tag()
+
+
+def test_verify_checksum_missing_entry(tmp_path):
+    f = tmp_path / "asset.zip"
+    f.write_bytes(b"data")
+    with _pytest.raises(_u.UpdateError, match="does not include"):
+        _u.verify_checksum(f, "deadbeef  other-file.zip")
+
+
+def test_download_installer_skips_when_no_checksums(tmp_path, monkeypatch):
+    monkeypatch.setattr(_u, "fetch_installer_asset",
+                        lambda tag, system=None, release=None: _u.ReleaseAsset("install.sh", "http://x"))
+    monkeypatch.setattr(_u, "_download", lambda url, dest: dest.write_text("#!/bin/sh"))
+    monkeypatch.setattr(_u, "download_text", _MM(side_effect=_urlerr.URLError("404")))
+    p = _u.download_installer("v0.1.3", tmp_path, system="Linux")
+    assert p.exists()  # verification skipped, no raise
+
+
+def test_run_installer_windows_command(tmp_path, monkeypatch):
+    run = _MM()
+    monkeypatch.setattr("subprocess.run", run)
+    p = tmp_path / "install.ps1"
+    p.write_text("x")
+    _u.run_installer(p, system="Windows", version="v0.1.3")
+    cmd = run.call_args[0][0]
+    assert cmd[0] == "powershell" and str(p) in cmd
+    assert run.call_args.kwargs["env"]["MCP_HARBOUR_VERSION"] == "v0.1.3"
+
+
+def test_run_installer_unsupported(tmp_path):
+    with _pytest.raises(_u.UpdateError):
+        _u.run_installer(tmp_path / "x", system="Plan9")
+
+
+def test_update_binary_up_to_date_returns_without_installing(monkeypatch):
+    monkeypatch.setattr(_u, "_fetch_release", lambda tag: {"tag_name": f"v{_VER}"})
+    info = _u.ReleaseInfo(tag=f"v{_VER}", asset=_u.ReleaseAsset("a", "b"), update_available=False)
+    monkeypatch.setattr(_u, "fetch_release_info", lambda **k: info)
+    installer = _MM()
+    monkeypatch.setattr(_u, "run_update_installer", installer)
+    result = _u.update_binary()
+    assert result.update_available is False
+    installer.assert_not_called()
+
+
+def test_fetch_latest_tag_success(monkeypatch):
+    monkeypatch.setattr("urllib.request.urlopen", lambda *a, **k: _cm(b'{"tag_name":"v0.1.5"}'))
+    assert _u.fetch_latest_tag() == "v0.1.5"

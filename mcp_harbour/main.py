@@ -557,5 +557,5 @@ def permit_show(identity: str):
             console.print(f"    - Tool: [green]{tool.name}[/green]{pol_str}")
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     app()
