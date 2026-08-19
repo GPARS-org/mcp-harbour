@@ -1,0 +1,3 @@
+ERROR    mcp_harbour:gateway.py:261 Port 36223 is already in use. Is another harbour instance running?
+ERROR    mcp_harbour:gateway.py:262 Check with: harbour status
+ERROR    mcp_harbour:gateway.py:263 Or use a different port: harbour serve --port <port>

@@ -1,0 +1,112 @@
+[
+  {
+    "run_number": 15,
+    "run_id": "32037298504",
+    "date": "2026-08-17T14:02:35Z",
+    "ref": "main",
+    "commit": "97c828712c45943e4760f6c89ec66ea45ed49b4d",
+    "trigger": "workflow_dispatch",
+    "passed": 878,
+    "failed": 0,
+    "skipped": 0
+  },
+  {
+    "run_number": 14,
+    "run_id": "32035830529",
+    "date": "2026-08-17T13:40:40Z",
+    "ref": "main",
+    "commit": "c883dffd0368010131cad0b0d0cfb7cbca63a197",
+    "trigger": "workflow_dispatch",
+    "passed": 906,
+    "failed": 0,
+    "skipped": 0
+  },
+  {
+    "run_number": 13,
+    "run_id": "32010704302",
+    "date": "2026-08-17T08:35:39Z",
+    "ref": "main",
+    "commit": "512584f1960001998c50e60bffec8c020bcae590",
+    "trigger": "workflow_dispatch",
+    "passed": 543,
+    "failed": 0,
+    "skipped": 0
+  },
+  {
+    "run_number": 12,
+    "run_id": "31984515934",
+    "date": "2026-08-17T01:22:17Z",
+    "ref": "main",
+    "commit": "bd11e139f06e8f91e04310c10afd80773ebecd3f",
+    "trigger": "workflow_dispatch",
+    "passed": 531,
+    "failed": 0,
+    "skipped": 0
+  },
+  {
+    "run_number": 11,
+    "run_id": "31980989864",
+    "date": "2026-08-17T00:11:34Z",
+    "ref": "main",
+    "commit": "d0b15b705c587023cd7a28c5e7cbc37274ef3a63",
+    "trigger": "workflow_dispatch",
+    "passed": 528,
+    "failed": 0,
+    "skipped": 0
+  },
+  {
+    "run_number": 10,
+    "run_id": "31959099030",
+    "date": "2026-08-16T16:41:14Z",
+    "ref": "main",
+    "commit": "bbef2d6d2502bf84ee0196fed188f8b1c660f1f5",
+    "trigger": "workflow_dispatch",
+    "passed": 525,
+    "failed": 0,
+    "skipped": 0
+  },
+  {
+    "run_number": 9,
+    "run_id": "31917918517",
+    "date": "2026-08-16T00:48:42Z",
+    "ref": "main",
+    "commit": "4fc1c0e81b565e3cea2eed68c981ed17f9f91c6d",
+    "trigger": "workflow_dispatch",
+    "passed": 522,
+    "failed": 0,
+    "skipped": 0
+  },
+  {
+    "run_number": 6,
+    "run_id": "31895280451",
+    "date": "2026-08-15T16:25:59Z",
+    "ref": "main",
+    "commit": "14111014936836aeca4a14b23fbc76caa5b09d52",
+    "trigger": "workflow_dispatch",
+    "passed": 501,
+    "failed": 0,
+    "skipped": 0
+  },
+  {
+    "run_number": 5,
+    "run_id": "31651034719",
+    "date": "2026-08-12T23:34:06Z",
+    "ref": "main",
+    "commit": "e3693d9ccaf49884a4a48859c6b12dec795cb95a",
+    "trigger": "workflow_dispatch",
+    "passed": 498,
+    "failed": 0,
+    "skipped": 0
+  },
+  {
+    "run_number": 4,
+    "run_id": "31504438696",
+    "date": "2026-08-11T15:02:55Z",
+    "ref": "main",
+    "commit": "2724fe026d2ce58f459a617ce2bf18dedf9085f6",
+    "trigger": "workflow_dispatch",
+    "passed": 492,
+    "failed": 0,
+    "skipped": 0
+  }
+]

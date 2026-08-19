@@ -1,0 +1,1 @@
+ERROR    mcp_harbour:gateway.py:162 Keyring error checking identity 'a': boom

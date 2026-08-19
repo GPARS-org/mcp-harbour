@@ -1,0 +1,3 @@
+ERROR    mcp_harbour:gateway.py:466 Port 49172 is already in use. Is another harbour instance running?
+ERROR    mcp_harbour:gateway.py:467 Check with: harbour status
+ERROR    mcp_harbour:gateway.py:468 Or use a different port: harbour serve --port <port>

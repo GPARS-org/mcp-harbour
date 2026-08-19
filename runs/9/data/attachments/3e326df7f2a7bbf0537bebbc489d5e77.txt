@@ -1,0 +1,3 @@
+ERROR    mcp_harbour:gateway.py:419 Port 61158 is already in use. Is another harbour instance running?
+ERROR    mcp_harbour:gateway.py:420 Check with: harbour status
+ERROR    mcp_harbour:gateway.py:421 Or use a different port: harbour serve --port <port>

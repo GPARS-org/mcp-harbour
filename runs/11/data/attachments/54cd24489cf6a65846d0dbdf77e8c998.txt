@@ -1,0 +1,5 @@
+INFO:     127.0.0.1:35516 - "GET /healthz HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35522 - "POST /mcp HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35526 - "POST /mcp HTTP/1.1" 202 Accepted
+INFO:     127.0.0.1:35528 - "GET /mcp HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35530 - "POST /mcp HTTP/1.1" 200 OK

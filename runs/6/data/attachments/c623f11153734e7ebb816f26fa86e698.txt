@@ -1,0 +1,3 @@
+ERROR    mcp_harbour:gateway.py:299 Port 50337 is already in use. Is another harbour instance running?
+ERROR    mcp_harbour:gateway.py:300 Check with: harbour status
+ERROR    mcp_harbour:gateway.py:301 Or use a different port: harbour serve --port <port>

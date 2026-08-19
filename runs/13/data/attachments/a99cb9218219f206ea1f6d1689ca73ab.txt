@@ -1,0 +1,1 @@
+WARNING  mcp_harbour:gateway.py:356 Server 'broken' failed its health check; will restart: broken pipe

@@ -1,0 +1,40 @@
+INFO     uvicorn.access:h11_impl.py:482 127.0.0.1:55960 - "POST /mcp HTTP/1.1" 200
+INFO     uvicorn.access:h11_impl.py:482 127.0.0.1:55976 - "POST /mcp HTTP/1.1" 202
+INFO     uvicorn.access:h11_impl.py:482 127.0.0.1:55986 - "GET /mcp HTTP/1.1" 200
+INFO     uvicorn.access:h11_impl.py:482 127.0.0.1:55988 - "POST /mcp HTTP/1.1" 200
+INFO     uvicorn.access:h11_impl.py:482 127.0.0.1:55998 - "POST /mcp HTTP/1.1" 200
+ERROR    uvicorn.error:on.py:134 Traceback (most recent call last):
+  File "/opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/site-packages/starlette/routing.py", line 655, in lifespan
+    await receive()
+  File "/opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/site-packages/uvicorn/lifespan/on.py", line 137, in receive
+    return await self.receive_queue.get()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/asyncio/queues.py", line 158, in get
+    await getter
+asyncio.exceptions.CancelledError
+
+ERROR    asyncio:base_events.py:1833 an error occurred during closing of asynchronous generator <async_generator object stdio_client at 0x7f092ebfa7a0>
+asyncgen: <async_generator object stdio_client at 0x7f092ebfa7a0>
+  + Exception Group Traceback (most recent call last):
+  |   File "/opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/site-packages/anyio/_backends/_asyncio.py", line 815, in __aexit__
+  |     raise BaseExceptionGroup(
+  | BaseExceptionGroup: unhandled errors in a TaskGroup (1 sub-exception)
+  +-+---------------- 1 ----------------
+    | Traceback (most recent call last):
+    |   File "/opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/site-packages/mcp/client/stdio/__init__.py", line 189, in stdio_client
+    |     yield read_stream, write_stream
+    | GeneratorExit
+    +------------------------------------
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/site-packages/mcp/client/stdio/__init__.py", line 183, in stdio_client
+    anyio.create_task_group() as tg,
+    ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/site-packages/anyio/_backends/_asyncio.py", line 821, in __aexit__
+    if self.cancel_scope.__exit__(type(exc), exc, exc.__traceback__):
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/site-packages/anyio/_backends/_asyncio.py", line 464, in __exit__
+    raise RuntimeError(
+RuntimeError: Attempted to exit cancel scope in a different task than it was entered in

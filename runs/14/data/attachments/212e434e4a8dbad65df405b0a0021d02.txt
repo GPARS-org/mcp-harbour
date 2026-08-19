@@ -1,0 +1,1 @@
+ERROR    mcp_harbour:gateway.py:459 Could not initialize control token: keyring

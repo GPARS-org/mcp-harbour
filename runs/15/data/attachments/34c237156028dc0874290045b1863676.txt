@@ -1,0 +1,1 @@
+WARNING  mcp_harbour.config:config.py:146 Could not delete keyring entry for 'agent': boom
