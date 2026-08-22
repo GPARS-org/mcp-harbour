@@ -1,3 +1,10 @@
+> [!IMPORTANT]
+> **MCP Harbour is now [Steerholm](https://github.com/steerholm/steerholm).** This
+> repository is archived and no longer maintained — development continues at
+> **[steerholm/steerholm](https://github.com/steerholm/steerholm)** ·
+> [steerholm.ai](https://steerholm.ai). Existing MCP Harbour installs stay on the
+> final `v0.1.3` release here and will not auto-update.
+
 <p align="center">
   <img src="https://github.com/user-attachments/assets/bf7d955f-c79e-41c8-b517-e05c27bd2203" alt="MCP Harbour" height="256" />
 </p>
